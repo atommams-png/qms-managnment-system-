@@ -264,7 +264,7 @@ npm run dev
 
 ## 🚀 System is Ready!
 
-Your Code Exam Guard application is now:
+Your ATOM QMS application is now:
 - ✅ Data persisted in MySQL
 - ✅ API-based architecture
 - ✅ Production ready

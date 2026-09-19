@@ -291,7 +291,7 @@ Read these docs in order:
 
 ## 🎉 You're All Set!
 
-Your Code Exam Guard system now has:
+Your ATOM QMS system now has:
 - ✅ Professional colorful Excel export
 - ✅ Tab switch security tracking
 - ✅ 7 detailed analysis sheets

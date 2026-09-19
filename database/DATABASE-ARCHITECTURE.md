@@ -1,4 +1,4 @@
-# Code Exam Guard - Database Architecture Diagram
+# ATOM QMS - Database Architecture Diagram
 
 ## Entity Relationship Diagram (ERD)
 

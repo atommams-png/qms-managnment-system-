@@ -1,4 +1,4 @@
-# 🚀 Code Exam Guard - MySQL Migration Complete
+# 🚀 ATOM QMS - MySQL Migration Complete
 
 This document explains how to set up and run the application with MySQL database (replacing local storage).
 
@@ -25,7 +25,7 @@ npm run init:db
 
 This script will:
 - Connect to MySQL as root
-- Create the `code_exam_guard` database
+- Create the `atom_qms` database
 - Create all required tables (admins, exams, questions, candidates, exam_attempts, exam_results)
 - Insert default admin credentials
 
@@ -46,10 +46,10 @@ Expected output:
 ```
 ✓ Database connection successful
 ╔════════════════════════════════════════════════════════════╗
-║     🚀 Code Exam Guard Backend API                        ║
+║     🚀 ATOM QMS Backend API                        ║
 ║     Server running on: http://localhost:5000              ║
 ║     Environment: development                              ║
-║     Database: code_exam_guard                             ║
+║     Database: atom_qms                             ║
 ╚════════════════════════════════════════════════════════════╝
 ```
 
@@ -129,7 +129,7 @@ DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=12345
-DB_NAME=code_exam_guard
+DB_NAME=atom_qms
 PORT=5000
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173,http://localhost:3000

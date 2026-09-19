@@ -12,7 +12,7 @@
 - No more device-specific data silos
 
 ### ✅ Implemented MySQL Database
-- Created `code_exam_guard` database
+- Created `atom_qms` database
 - 6 tables: admins, exams, questions, candidates, exam_attempts, exam_results
 - 2 views for reporting
 - All foreign keys and indexes
@@ -44,7 +44,7 @@
 ### Database Initialization ✅
 ```
 ✓ MySQL Server Connected
-✓ Database Created: code_exam_guard
+✅ Database Created: atom_qms
 ✓ 6 Tables Created Successfully
 ✓ 2 Views Created
 ✓ Default Admin User Inserted
@@ -319,7 +319,7 @@ Everything has been:
 ✅ Fixed
 ✅ Documented
 
-**Your Code Exam Guard is now running with MySQL!**
+**Your ATOM QMS is now running with MySQL!**
 
 **Ready to use immediately!** 🚀
 

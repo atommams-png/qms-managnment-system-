@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, Trash2, Download, Copy, Edit, Settings, Upload, FileText } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Download, Copy, Edit, Settings, Upload, FileText, Eye, CheckCircle2, HelpCircle, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { ImageUploadInput } from '@/components/ImageUploadInput';
 import { exportExamResultsToExcel, previewQuestionsFromExcel, downloadQuestionsTemplate } from '@/lib/excelUtils';
@@ -19,6 +19,7 @@ const ExamManage = () => {
   const navigate = useNavigate();
   const [exam, setExam] = useState<Exam | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('questions');
   const [questionType, setQuestionType] = useState<'mcq' | 'mcq-image' | 'true-false' | 'reading-comprehension'>('mcq');
   const [questionText, setQuestionText] = useState('');
   const [questionImage, setQuestionImage] = useState('');
@@ -62,7 +63,14 @@ const ExamManage = () => {
   
   const questionFileRef = useRef<HTMLInputElement>(null);
   const imageUploadSectionRef = useRef<HTMLDivElement>(null);
+  const formSectionRef = useRef<HTMLDivElement>(null);
   const scheduleRef = useRef<HTMLDivElement>(null);
+
+  const getEditingQuestionNumber = () => {
+    if (!exam || !editingQuestionId) return null;
+    const index = exam.questions.findIndex(q => q.id === editingQuestionId);
+    return index !== -1 ? index + 1 : null;
+  };
 
   useEffect(() => {
     if (window.location.hash === '#schedule') {
@@ -192,6 +200,17 @@ const ExamManage = () => {
     if (!iso) return '';
     const formatted = formatDateTimeDDMMYYYY(iso);
     return formatted === 'Not scheduled' ? '' : formatted;
+  };
+
+  const getSubmissionStatus = (attempt: ExamAttempt | undefined) => {
+    if (!attempt) return 'Normal Submit';
+    const maxTabSwitches = exam?.settings?.maxTabSwitches ?? 0;
+
+    if (maxTabSwitches > 0 && attempt.tabSwitches >= maxTabSwitches) {
+      return 'Limit Exceeded';
+    }
+
+    return 'Normal Submit';
   };
 
   const getFilteredCandidates = () => {
@@ -363,9 +382,9 @@ const ExamManage = () => {
     setPassageGroupId(question.passageGroupId || '');
     setLinkToPreviousPassage(!!question.passageGroupId);
 
-    // Scroll to image upload section after state updates
+    // Scroll to form section after state updates
     setTimeout(() => {
-      imageUploadSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
   };
 
@@ -538,7 +557,7 @@ const ExamManage = () => {
         </Header>
       </div>
 
-      <main className="container max-w-4xl py-8 mt-4 animate-fade-in">
+      <main className="max-w-4xl mx-auto px-4 lg:max-w-[1600px] py-8 mt-4 animate-fade-in">
         <div ref={scheduleRef} />
         <Card className="border-green-200 shadow-md mb-6">
           <CardHeader className="bg-gradient-to-r from-green-50 to-green-100 border-b border-green-200">
@@ -557,21 +576,71 @@ const ExamManage = () => {
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="questions">
-          <TabsList className="mb-6">
-            <TabsTrigger value="questions">Questions ({exam.questions.length})</TabsTrigger>
-            <TabsTrigger value="participants">Results Sheet ({Math.max(candidates.length, results.length)})</TabsTrigger>
-          </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <TabsList className="bg-emerald-50/90 border-2 border-emerald-200 p-1.5 rounded-xl h-auto flex gap-2 shadow-sm">
+              <TabsTrigger 
+                value="questions"
+                className="px-5 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-emerald-950 data-[state=inactive]:hover:bg-emerald-100/80 cursor-pointer"
+              >
+                <span>Questions</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold transition-colors ${activeTab === 'questions' ? 'bg-white/25 text-white shadow-sm' : 'bg-emerald-200 text-emerald-900'}`}>
+                  {exam.questions.length}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="participants"
+                className="px-5 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-emerald-950 data-[state=inactive]:hover:bg-emerald-100/80 cursor-pointer"
+              >
+                <span>Results Sheet</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold transition-colors ${activeTab === 'participants' ? 'bg-white/25 text-white shadow-sm' : 'bg-emerald-200 text-emerald-900'}`}>
+                  {Math.max(candidates.length, results.length)}
+                </span>
+              </TabsTrigger>
+            </TabsList>
+
+            {activeTab === 'questions' && (
+              <div className="flex items-center gap-2">
+                <Button 
+                  size="sm" 
+                  onClick={() => questionFileRef.current?.click()} 
+                  disabled={isImporting}
+                  className="bg-primary text-white hover:bg-primary/90 shadow-sm"
+                >
+                  <Upload className="mr-1.5 h-4 w-4" /> Import Questions
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={downloadQuestionsTemplate}
+                  className="bg-primary text-white hover:bg-primary/90 shadow-sm"
+                >
+                  <FileText className="mr-1.5 h-4 w-4" /> Question Template
+                </Button>
+              </div>
+            )}
+
+            {activeTab === 'participants' && (
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowFilters(!showFilters)}
+                >
+                  {showFilters ? 'Hide' : 'Show'} Filters
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={() => setShowExportDialog(true)}
+                  disabled={results.length === 0}
+                  className="bg-primary text-white hover:bg-primary/90 shadow-sm"
+                >
+                  <Download className="mr-1.5 h-4 w-4" /> Export Excel Report
+                </Button>
+              </div>
+            )}
+          </div>
 
           <TabsContent value="questions" className="space-y-6">
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => questionFileRef.current?.click()} disabled={isImporting}>
-                <Upload className="mr-1.5 h-4 w-4" /> Import Questions
-              </Button>
-              <Button variant="outline" size="sm" onClick={downloadQuestionsTemplate}>
-                <FileText className="mr-1.5 h-4 w-4" /> Question Template
-              </Button>
-            </div>
             <input
               ref={questionFileRef}
               type="file"
@@ -652,179 +721,378 @@ const ExamManage = () => {
                 </Card>
               </div>
             )}
-            <Card>
-              <CardHeader><CardTitle className="text-base">{isEditing ? 'Edit Question' : 'Add Question'}</CardTitle></CardHeader>
-              <CardContent>
-                <form onSubmit={handleAddQuestion} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Question Type</Label>
-                    <select value={questionType} onChange={e => handleQuestionTypeChange(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
-                      <option value="mcq">MCQ (Multiple Choice)</option>
-                      <option value="mcq-image">MCQ with Images</option>
-                      <option value="true-false">True/False</option>
-                      <option value="reading-comprehension">Reading Comprehension</option>
-                    </select>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Section (Optional)</Label>
-                      <Input placeholder="e.g., Python, Java, Reading Comprehension" value={questionSection} onChange={e => setQuestionSection(e.target.value)} />
+            {/* 2-Column Authoring Section: Form on Left, Preview + Questions on Right */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left Column: Form (5 cols on lg, sticky) */}
+              <div ref={formSectionRef} className="lg:col-span-5 space-y-4 lg:sticky lg:top-6">
+                <Card className={`transition-all shadow-sm ${isEditing ? 'border-amber-400 dark:border-amber-600 ring-1 ring-amber-400/30' : 'border-border'}`}>
+                  <CardHeader className={`${isEditing ? 'bg-amber-50/50 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800/50' : 'bg-muted/40 border-b'} pb-3`}>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        {isEditing ? <Edit className="h-4 w-4 text-amber-600" /> : <Plus className="h-4 w-4 text-primary" />}
+                        {isEditing ? `Edit Question ${getEditingQuestionNumber() ? `#${getEditingQuestionNumber()}` : ''}` : 'Add Question'}
+                      </CardTitle>
+                      {isEditing && (
+                        <Badge variant="outline" className="text-xs bg-amber-100 text-amber-800 border-amber-300 font-medium">
+                          Editing Mode
+                        </Badge>
+                      )}
                     </div>
-                    <div className="space-y-2">
-                      <Label>Marks</Label>
-                      <Input type="number" min="1" placeholder="Marks for this question" value={questionMarks} onChange={e => setQuestionMarks(Math.max(1, parseInt(e.target.value) || 1))} required />
-                    </div>
-                  </div>
-                  <div className="space-y-3 rounded-md border border-border p-3">
-                    <div className="flex items-center gap-2">
-                      <input
-                        id="questionNegativeToggle"
-                        type="checkbox"
-                        checked={useQuestionNegativeMarks}
-                        onChange={e => {
-                          setUseQuestionNegativeMarks(e.target.checked);
-                          if (!e.target.checked) {
-                            setQuestionNegativeMarks('');
-                          }
-                        }}
-                        className="rounded"
-                      />
-                      <Label htmlFor="questionNegativeToggle" className="cursor-pointer">Set negative marks for this question</Label>
-                    </div>
-                    {useQuestionNegativeMarks && (
+                    <CardDescription className="text-xs">
+                      {isEditing ? 'Make your adjustments below and click Update Question' : 'Enter question details, options, and select the correct answer'}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <form onSubmit={handleAddQuestion} className="space-y-4">
                       <div className="space-y-2">
-                        <Label>Question Negative Marks</Label>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.25"
-                          placeholder={`Exam default: ${exam.settings?.negativeMarks ?? 0}`}
-                          value={questionNegativeMarks}
-                          onChange={e => setQuestionNegativeMarks(e.target.value)}
+                        <Label>Question Type</Label>
+                        <select value={questionType} onChange={e => handleQuestionTypeChange(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
+                          <option value="mcq">MCQ (Multiple Choice)</option>
+                          <option value="mcq-image">MCQ with Images</option>
+                          <option value="true-false">True/False</option>
+                          <option value="reading-comprehension">Reading Comprehension</option>
+                        </select>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Section (Optional)</Label>
+                          <Input placeholder="e.g., Python, Java, Reading Comprehension" value={questionSection} onChange={e => setQuestionSection(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Marks</Label>
+                          <Input type="number" min="1" placeholder="Marks for this question" value={questionMarks} onChange={e => setQuestionMarks(Math.max(1, parseInt(e.target.value) || 1))} required />
+                        </div>
+                      </div>
+                      <div className="space-y-3 rounded-md border border-border p-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            id="questionNegativeToggle"
+                            type="checkbox"
+                            checked={useQuestionNegativeMarks}
+                            onChange={e => {
+                              setUseQuestionNegativeMarks(e.target.checked);
+                              if (!e.target.checked) {
+                                setQuestionNegativeMarks('');
+                              }
+                            }}
+                            className="rounded"
+                          />
+                          <Label htmlFor="questionNegativeToggle" className="cursor-pointer">Set negative marks for this question</Label>
+                        </div>
+                        {useQuestionNegativeMarks && (
+                          <div className="space-y-2">
+                            <Label>Question Negative Marks</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.25"
+                              placeholder={`Exam default: ${exam.settings?.negativeMarks ?? 0}`}
+                              value={questionNegativeMarks}
+                              onChange={e => setQuestionNegativeMarks(e.target.value)}
+                            />
+                          </div>
+                        )}
+                        {!useQuestionNegativeMarks && (
+                          <p className="text-xs text-muted-foreground">
+                            Using exam-level negative marks: {exam.settings?.negativeMarks ?? 0}
+                          </p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label>{questionType === 'reading-comprehension' ? 'Question (about the passage)' : 'Question Text'}</Label>
+                        <Input placeholder={questionType === 'reading-comprehension' ? "e.g., Which of the following..." : "Enter question text"} value={questionText} onChange={e => setQuestionText(e.target.value)} required />
+                      </div>
+                      {questionType === 'reading-comprehension' && (
+                        <div className="space-y-3 border border-border rounded p-3">
+                          <div className="flex items-center gap-2">
+                            <input type="checkbox" id="linkPassage" checked={linkToPreviousPassage} onChange={e => {
+                              setLinkToPreviousPassage(e.target.checked);
+                              if (e.target.checked) setPassage('');
+                            }} className="rounded" />
+                            <Label htmlFor="linkPassage" className="cursor-pointer">Use same passage from previous question</Label>
+                          </div>
+                          {linkToPreviousPassage && exam ? (() => {
+                            const prevRCQuestions = exam.questions.filter((q, idx) => q.type === 'reading-comprehension' && q.passage);
+                            const uniquePassages = Array.from(new Map(prevRCQuestions.map(q => [q.passageGroupId || q.id, q])).values());
+                            return (
+                              <div className="space-y-2">
+                                <Label>Select Passage</Label>
+                                <select value={passageGroupId} onChange={e => {
+                                  const q = prevRCQuestions.find(pq => (pq.passageGroupId || pq.id) === e.target.value);
+                                  if (q) {
+                                    setPassageGroupId(q.passageGroupId || q.id);
+                                    setPassage(q.passage || '');
+                                  }
+                                }} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
+                                  <option value="">Select a passage...</option>
+                                  {uniquePassages.map((q, i) => (
+                                    <option key={q.passageGroupId || q.id} value={q.passageGroupId || q.id}>
+                                      Passage {i + 1}: {q.passage?.substring(0, 50)}...
+                                    </option>
+                                  ))}
+                                </select>
+                                {passage && <div className="p-2 bg-muted rounded text-sm max-h-24 overflow-y-auto">{passage}</div>}
+                              </div>
+                            );
+                          })() : (
+                            <div className="space-y-2">
+                              <Label>Passage Text</Label>
+                              <textarea placeholder="Enter the reading passage here" value={passage} onChange={e => setPassage(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm min-h-32" />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {(questionType === 'mcq' || questionType === 'mcq-image') && (
+                        <div ref={imageUploadSectionRef} className="space-y-2">
+                          <Label>Question Image {questionType === 'mcq-image' && '(Required for MCQ with Images)'}</Label>
+                          <div className="space-y-2">
+                            <Input placeholder="Enter image URL or upload a file" value={questionImage} onChange={e => setQuestionImage(e.target.value)} required={questionType === 'mcq-image'} />
+                            <ImageUploadInput label="Or upload question image" value={questionImage && questionImage.startsWith('data:') ? questionImage : ''} onChange={setQuestionImage} />
+                          </div>
+                          {questionImage && <img src={questionImage} alt="Question preview" className="h-32 w-auto rounded border" onError={() => toast.error('Failed to load image')} />}
+                        </div>
+                      )}
+                      {(questionType === 'mcq' || questionType === 'mcq-image') && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {options.map((opt, i) => (
+                            <div key={i} className="space-y-1">
+                              <Label className="flex items-center gap-2">
+                                <input type="radio" name="correct" checked={correctAnswer === i} onChange={() => setCorrectAnswer(i)} className="accent-primary" />
+                                Option {String.fromCharCode(65 + i)} {correctAnswer === i && <Badge variant="outline" className="text-xs">Correct</Badge>}
+                              </Label>
+                              <Input placeholder={`Option ${String.fromCharCode(65 + i)} text`} value={opt} onChange={e => { const n = [...options]; n[i] = e.target.value; setOptions(n); }} />
+                              {questionType === 'mcq-image' && <ImageUploadInput label={`Option ${String.fromCharCode(65 + i)} image`} value={optionImages[i]} onChange={e => { const n = [...optionImages]; n[i] = e; setOptionImages(n); }} />}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {questionType === 'true-false' && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label className="flex items-center gap-2">
+                              <input type="radio" name="correct" checked={correctAnswer === 0} onChange={() => setCorrectAnswer(0)} className="accent-primary" />
+                              Option A {correctAnswer === 0 && <Badge variant="outline" className="text-xs">Correct</Badge>}
+                            </Label>
+                            <Input placeholder="Option A text" value={options[0]} onChange={e => { const n = [...options]; n[0] = e.target.value; setOptions(n); }} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="flex items-center gap-2">
+                              <input type="radio" name="correct" checked={correctAnswer === 1} onChange={() => setCorrectAnswer(1)} className="accent-primary" />
+                              Option B {correctAnswer === 1 && <Badge variant="outline" className="text-xs">Correct</Badge>}
+                            </Label>
+                            <Input placeholder="Option B text" value={options[1]} onChange={e => { const n = [...options]; n[1] = e.target.value; setOptions(n); }} />
+                          </div>
+                        </div>
+                      )}
+                      {questionType === 'reading-comprehension' && (
+                        <div className="space-y-2">
+                          <Label>Answer Options</Label>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            {options.map((opt, i) => (
+                              <div key={i} className="space-y-1">
+                                <Label className="flex items-center gap-2">
+                                  <input type="radio" name="correct" checked={correctAnswer === i} onChange={() => setCorrectAnswer(i)} className="accent-primary" />
+                                  Option {String.fromCharCode(65 + i)} {correctAnswer === i && <Badge variant="outline" className="text-xs">Correct</Badge>}
+                                </Label>
+                                <Input placeholder={`Option ${String.fromCharCode(65 + i)} text`} value={opt} onChange={e => { const n = [...options]; n[i] = e.target.value; setOptions(n); }} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <Button type="submit" className="flex-1">{isEditing ? 'Update Question' : <><Plus className="mr-1.5 h-4 w-4" /> Add Question</>}</Button>
+                        {isEditing && <Button type="button" variant="outline" onClick={handleCancelEdit}>Cancel</Button>}
+                      </div>
+                    </form>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Right Column: Live Question Preview & Questions List (7 cols on lg) */}
+              <div className="lg:col-span-7 space-y-6">
+                <Card className="border-2 border-primary/30 shadow-md bg-card overflow-hidden">
+                  <CardHeader className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2 text-primary font-semibold">
+                        <Eye className="h-4 w-4 text-primary" />
+                        Live Question Preview
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        {isEditing ? (
+                          <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-300 font-medium">
+                            Editing Q{getEditingQuestionNumber()}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30 flex items-center gap-1.5">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            Draft
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <CardDescription className="text-xs">
+                      Live preview of how candidates will see this question
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-4 space-y-4">
+                    {/* Metadata Header Badges */}
+                    <div className="flex items-center gap-2 flex-wrap pb-2 border-b border-border/60">
+                      <Badge variant="outline" className="text-xs font-semibold bg-muted/50">
+                        {questionType === 'mcq' && 'MCQ'}
+                        {questionType === 'mcq-image' && 'MCQ + Images'}
+                        {questionType === 'true-false' && 'True / False'}
+                        {questionType === 'reading-comprehension' && 'Reading Comprehension'}
+                      </Badge>
+
+                      {questionSection.trim() && (
+                        <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                          {questionSection.trim()}
+                        </Badge>
+                      )}
+
+                      <Badge variant="secondary" className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200">
+                        +{questionMarks} mark{questionMarks !== 1 ? 's' : ''}
+                      </Badge>
+
+                      <Badge variant="secondary" className="text-xs font-semibold text-rose-800 bg-rose-50 border border-rose-200">
+                        -{useQuestionNegativeMarks ? (questionNegativeMarks !== '' ? questionNegativeMarks : (exam?.settings?.negativeMarks ?? 0)) : (exam?.settings?.negativeMarks ?? 0)} neg
+                      </Badge>
+                    </div>
+
+                    {/* Reading Comprehension Passage Preview */}
+                    {questionType === 'reading-comprehension' && (
+                      <div className="p-3 bg-muted/70 rounded-md border text-sm max-h-48 overflow-y-auto">
+                        <p className="font-semibold text-xs text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                          <span>📖</span> Reading Passage
+                        </p>
+                        <p className="whitespace-pre-wrap text-sm text-foreground">
+                          {passage.trim() || <span className="text-muted-foreground italic">Enter or select a passage on the left...</span>}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Question Text */}
+                    <div className="space-y-1">
+                      <p className="text-base font-medium text-foreground leading-relaxed">
+                        <span className="font-bold text-primary mr-1">
+                          Q{isEditing ? (getEditingQuestionNumber() ?? (exam?.questions.length ?? 0) + 1) : ((exam?.questions.length ?? 0) + 1)}.
+                        </span>{' '}
+                        {questionText.trim() ? (
+                          questionText
+                        ) : (
+                          <span className="text-muted-foreground italic font-normal">
+                            Question text will appear here as you type...
+                          </span>
+                        )}
+                      </p>
+                    </div>
+
+                    {/* Question Image Preview */}
+                    {questionImage && (
+                      <div className="rounded-lg border bg-muted/20 p-2 overflow-hidden flex justify-center">
+                        <img
+                          src={questionImage}
+                          alt="Question preview"
+                          className="max-h-48 w-auto rounded object-contain"
+                          onError={() => {}}
                         />
                       </div>
                     )}
-                    {!useQuestionNegativeMarks && (
-                      <p className="text-xs text-muted-foreground">
-                        Using exam-level negative marks: {exam.settings?.negativeMarks ?? 0}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{questionType === 'reading-comprehension' ? 'Question (about the passage)' : 'Question Text'}</Label>
-                    <Input placeholder={questionType === 'reading-comprehension' ? "e.g., Which of the following..." : "Enter question text"} value={questionText} onChange={e => setQuestionText(e.target.value)} required />
-                  </div>
-                  {questionType === 'reading-comprehension' && (
-                    <div className="space-y-3 border border-border rounded p-3">
-                      <div className="flex items-center gap-2">
-                        <input type="checkbox" id="linkPassage" checked={linkToPreviousPassage} onChange={e => {
-                          setLinkToPreviousPassage(e.target.checked);
-                          if (e.target.checked) setPassage('');
-                        }} className="rounded" />
-                        <Label htmlFor="linkPassage" className="cursor-pointer">Use same passage from previous question</Label>
-                      </div>
-                      {linkToPreviousPassage && exam ? (() => {
-                        const prevRCQuestions = exam.questions.filter((q, idx) => q.type === 'reading-comprehension' && q.passage);
-                        const uniquePassages = Array.from(new Map(prevRCQuestions.map(q => [q.passageGroupId || q.id, q])).values());
-                        return (
-                          <div className="space-y-2">
-                            <Label>Select Passage</Label>
-                            <select value={passageGroupId} onChange={e => {
-                              const q = prevRCQuestions.find(pq => (pq.passageGroupId || pq.id) === e.target.value);
-                              if (q) {
-                                setPassageGroupId(q.passageGroupId || q.id);
-                                setPassage(q.passage || '');
-                              }
-                            }} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm">
-                              <option value="">Select a passage...</option>
-                              {uniquePassages.map((q, i) => (
-                                <option key={q.passageGroupId || q.id} value={q.passageGroupId || q.id}>
-                                  Passage {i + 1}: {q.passage?.substring(0, 50)}...
-                                </option>
-                              ))}
-                            </select>
-                            {passage && <div className="p-2 bg-muted rounded text-sm max-h-24 overflow-y-auto">{passage}</div>}
-                          </div>
-                        );
-                      })() : (
-                        <div className="space-y-2">
-                          <Label>Passage Text</Label>
-                          <textarea placeholder="Enter the reading passage here" value={passage} onChange={e => setPassage(e.target.value)} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm min-h-32" />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {(questionType === 'mcq' || questionType === 'mcq-image') && (
-                    <div ref={imageUploadSectionRef} className="space-y-2">
-                      <Label>Question Image {questionType === 'mcq-image' && '(Required for MCQ with Images)'}</Label>
-                      <div className="space-y-2">
-                        <Input placeholder="Enter image URL or upload a file" value={questionImage} onChange={e => setQuestionImage(e.target.value)} required={questionType === 'mcq-image'} />
-                        <ImageUploadInput label="Or upload question image" value={questionImage && questionImage.startsWith('data:') ? questionImage : ''} onChange={setQuestionImage} />
-                      </div>
-                      {questionImage && <img src={questionImage} alt="Question preview" className="h-32 w-auto rounded border" onError={() => toast.error('Failed to load image')} />}
-                    </div>
-                  )}
-                  {(questionType === 'mcq' || questionType === 'mcq-image') && (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {options.map((opt, i) => (
-                        <div key={i} className="space-y-1">
-                          <Label className="flex items-center gap-2">
-                            <input type="radio" name="correct" checked={correctAnswer === i} onChange={() => setCorrectAnswer(i)} className="accent-primary" />
-                            Option {String.fromCharCode(65 + i)} {correctAnswer === i && <Badge variant="outline" className="text-xs">Correct</Badge>}
-                          </Label>
-                          <Input placeholder={`Option ${String.fromCharCode(65 + i)} text`} value={opt} onChange={e => { const n = [...options]; n[i] = e.target.value; setOptions(n); }} />
-                          {questionType === 'mcq-image' && <ImageUploadInput label={`Option ${String.fromCharCode(65 + i)} image`} value={optionImages[i]} onChange={e => { const n = [...optionImages]; n[i] = e; setOptionImages(n); }} />}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {questionType === 'true-false' && (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label className="flex items-center gap-2">
-                          <input type="radio" name="correct" checked={correctAnswer === 0} onChange={() => setCorrectAnswer(0)} className="accent-primary" />
-                          Option A {correctAnswer === 0 && <Badge variant="outline" className="text-xs">Correct</Badge>}
-                        </Label>
-                        <Input placeholder="Option A text" value={options[0]} onChange={e => { const n = [...options]; n[0] = e.target.value; setOptions(n); }} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="flex items-center gap-2">
-                          <input type="radio" name="correct" checked={correctAnswer === 1} onChange={() => setCorrectAnswer(1)} className="accent-primary" />
-                          Option B {correctAnswer === 1 && <Badge variant="outline" className="text-xs">Correct</Badge>}
-                        </Label>
-                        <Input placeholder="Option B text" value={options[1]} onChange={e => { const n = [...options]; n[1] = e.target.value; setOptions(n); }} />
-                      </div>
-                    </div>
-                  )}
-                  {questionType === 'reading-comprehension' && (
-                    <div className="space-y-2">
-                      <Label>Answer Options</Label>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {options.map((opt, i) => (
-                          <div key={i} className="space-y-1">
-                            <Label className="flex items-center gap-2">
-                              <input type="radio" name="correct" checked={correctAnswer === i} onChange={() => setCorrectAnswer(i)} className="accent-primary" />
-                              Option {String.fromCharCode(65 + i)} {correctAnswer === i && <Badge variant="outline" className="text-xs">Correct</Badge>}
-                            </Label>
-                            <Input placeholder={`Option ${String.fromCharCode(65 + i)} text`} value={opt} onChange={e => { const n = [...options]; n[i] = e.target.value; setOptions(n); }} />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <Button type="submit" className="flex-1">{isEditing ? 'Update Question' : <><Plus className="mr-1.5 h-4 w-4" /> Add Question</>}</Button>
-                    {isEditing && <Button type="button" variant="outline" onClick={handleCancelEdit}>Cancel</Button>}
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
 
-            {exam.questions.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">No questions available yet. Add your first question.</CardContent>
-              </Card>
-            ) : (() => {
+                    {/* Options Preview */}
+                    <div className="space-y-2 pt-1">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Options:
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-1">
+                        {(questionType === 'true-false' ? options.slice(0, 2) : options).map((opt, i) => {
+                          const isCorrect = correctAnswer === i;
+                          const optionLabel = String.fromCharCode(65 + i);
+                          const fallbackText = questionType === 'true-false'
+                            ? (i === 0 ? 'True' : 'False')
+                            : `Option ${optionLabel} text`;
+                          const optionImageSrc = optionImages[i];
+
+                          return (
+                            <div
+                              key={i}
+                              className={`p-3 rounded-lg border transition-all ${
+                                isCorrect
+                                  ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/20 ring-1 ring-emerald-500/40'
+                                  : 'border-border bg-card hover:bg-muted/20'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-2.5 flex-1">
+                                  <div
+                                    className={`h-5 w-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
+                                      isCorrect
+                                        ? 'bg-emerald-600 text-white shadow-sm'
+                                        : 'bg-muted text-muted-foreground border'
+                                    }`}
+                                  >
+                                    {optionLabel}
+                                  </div>
+                                  <div className="flex-1 text-sm">
+                                    <span className={isCorrect ? 'font-semibold text-emerald-950 dark:text-emerald-100' : 'text-foreground'}>
+                                      {opt.trim() || <span className="text-muted-foreground italic">{fallbackText}</span>}
+                                    </span>
+                                    {questionType === 'mcq-image' && optionImageSrc && (
+                                      <div className="mt-2">
+                                        <img
+                                          src={optionImageSrc}
+                                          alt={`Option ${optionLabel}`}
+                                          className="h-20 w-auto rounded border object-cover"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                {isCorrect && (
+                                  <Badge className="bg-emerald-600 text-white text-[11px] font-semibold px-2 py-0.5 shrink-0 flex items-center gap-1 shadow-sm">
+                                    <CheckCircle2 className="h-3 w-3" /> Correct
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Preview Info Summary */}
+                    <div className="p-3 bg-muted/40 rounded-lg border text-xs text-muted-foreground flex items-center justify-between">
+                      <span>
+                        Key: <strong className="text-foreground">Option {String.fromCharCode(65 + correctAnswer)}</strong>
+                      </span>
+                      <span>
+                        Value: <strong className="text-foreground">{questionMarks} mark{questionMarks !== 1 ? 's' : ''}</strong>
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Questions in Exam List Header & Content */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center justify-between border-b pb-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                        Questions in Exam
+                        <Badge variant="secondary" className="font-semibold">{exam.questions.length}</Badge>
+                      </h3>
+                      <p className="text-xs text-muted-foreground">All questions currently assigned to this examination</p>
+                    </div>
+                  </div>
+
+              {exam.questions.length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center text-muted-foreground">No questions available yet. Add your first question above.</CardContent>
+                </Card>
+              ) : (() => {
               const sections = new Map<string, any[]>();
               exam.questions.forEach((q, idx) => {
                 const section = q.section || 'Unsorted';
@@ -977,28 +1245,14 @@ const ExamManage = () => {
                 );
               });
             })()}
+                </div>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="participants" className="space-y-6">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Results Sheet</h3>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setShowFilters(!showFilters)}
-                >
-                  {showFilters ? 'Hide' : 'Show'} Filters
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setShowExportDialog(true)}
-                  disabled={results.length === 0}
-                >
-                  <Download className="mr-1.5 h-4 w-4" /> Export Excel Report
-                </Button>
-              </div>
             </div>
 
             {showFilters && (
@@ -1129,8 +1383,10 @@ const ExamManage = () => {
                   <div className="text-sm text-muted-foreground mb-4">
                     Showing {getFilteredCandidates().length} of {candidates.length} candidates
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-[1200px] w-full text-sm table-auto">
+
+                  {/* Desktop Table View */}
+                  <div className="hidden lg:block overflow-x-auto">
+                    <table className="min-w-full w-full text-sm table-fixed">
                       <thead>
                         <tr className="bg-green-100 border-b-2 border-green-200">
                           <th className="px-4 py-3 font-semibold text-green-900 text-left">SL No</th>
@@ -1143,6 +1399,7 @@ const ExamManage = () => {
                           <th className="px-4 py-3 font-semibold text-green-900 text-left">Attempted</th>
                           <th className="px-4 py-3 font-semibold text-green-900 text-left">Tab Switches</th>
                           <th className="px-4 py-3 font-semibold text-green-900 text-left">Section-wise</th>
+                          <th className="px-4 py-3 font-semibold text-green-900 text-left">Status</th>
                           <th className="px-4 py-3 font-semibold text-green-900 text-center">Correct</th>
                           <th className="px-4 py-3 font-semibold text-green-900 text-center">Wrong</th>
                           <th className="px-4 py-3 font-semibold text-green-900 text-center">Score</th>
@@ -1157,14 +1414,19 @@ const ExamManage = () => {
                             <tr key={c.id} className={`border-b transition-colors hover:bg-green-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-green-50/30'}`}>
                               <td className="px-4 py-3 font-semibold text-green-700">{idx + 1}</td>
                               <td className="px-4 py-3 font-medium text-gray-900">{c.name}</td>
-                              <td className="px-4 py-3 text-gray-700">{c.email}</td>
-                              <td className="px-4 py-3 text-gray-700">{c.college}</td>
+                              <td className="px-4 py-3 text-gray-700 max-w-[220px] truncate overflow-hidden">{c.email}</td>
+                              <td className="px-4 py-3 text-gray-700 max-w-[180px] truncate overflow-hidden">{c.college}</td>
                               <td className="px-4 py-3 text-gray-700">{c.usn}</td>
                               <td className="px-4 py-3 text-gray-700">{c.department}</td>
                               <td className="px-4 py-3 text-gray-700">{c.section}</td>
                               <td className="px-4 py-3 text-gray-700">{attempt ? attempt.answers.length : 'N/A'}</td>
                               <td className="px-4 py-3 text-gray-700">{attempt?.tabSwitches ?? 0}</td>
-                              <td className="px-4 py-3 max-w-[260px] whitespace-normal break-words text-gray-700">{attempt ? getSectionScoresText(attempt) : 'N/A'}</td>
+                              <td className="px-4 py-3 max-w-[260px] whitespace-normal break-words text-gray-700 overflow-hidden">{attempt ? getSectionScoresText(attempt) : 'N/A'}</td>
+                              <td className="px-4 py-3 text-left">
+                                <Badge variant={getSubmissionStatus(attempt) === 'Limit Exceeded' ? 'destructive' : 'default'}>
+                                  {getSubmissionStatus(attempt)}
+                                </Badge>
+                              </td>
                               <td className="px-4 py-3 text-center text-green-600 font-semibold">{result?.correctAnswers ?? 0}</td>
                               <td className="px-4 py-3 text-center text-rose-600 font-semibold">{result?.wrongAnswers ?? 0}</td>
                               <td className="px-4 py-3 text-center font-bold text-gray-900">{result ? `${result.obtainedMarks}/${result.totalMarks}` : 'N/A'}</td>
@@ -1174,6 +1436,94 @@ const ExamManage = () => {
                         })}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Mobile Card View */}
+                  <div className="lg:hidden block space-y-3">
+                    {getFilteredCandidates().map((c, idx) => {
+                      const result = results.find(r => r.candidateId === c.id);
+                      const attempt = result ? getAttemptsList().find(a => a.id === result.attemptId) : undefined;
+                      return (
+                        <div key={c.id} className="bg-white border border-green-200 rounded-lg p-4 shadow-sm">
+                          {/* Header: SL No and Name */}
+                          <div className="flex justify-between items-start mb-3 pb-3 border-b border-green-100">
+                            <div>
+                              <p className="text-xs font-semibold text-green-600">#{idx + 1}</p>
+                              <p className="text-base font-bold text-gray-900">{c.name}</p>
+                            </div>
+                            <Badge variant={getSubmissionStatus(attempt) === 'Limit Exceeded' ? 'destructive' : 'default'}>
+                              {getSubmissionStatus(attempt)}
+                            </Badge>
+                          </div>
+
+                          {/* Email */}
+                          <div className="mb-2 pb-2 border-b border-green-100">
+                            <p className="text-xs font-medium text-green-700">Email</p>
+                            <p className="text-sm text-gray-700 break-words">{c.email}</p>
+                          </div>
+
+                          {/* Key Metrics Grid */}
+                          <div className="grid grid-cols-2 gap-3 mb-3 pb-3 border-b border-green-100">
+                            <div>
+                              <p className="text-xs font-medium text-green-700">Score</p>
+                              <p className="text-sm font-bold text-gray-900">{result ? `${result.obtainedMarks}/${result.totalMarks}` : 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-green-700">Percentage</p>
+                              <p className="text-sm font-bold text-gray-900">{result ? `${result.percentage}%` : 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-green-700">Correct</p>
+                              <p className="text-sm font-semibold text-green-600">{result?.correctAnswers ?? 0}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-green-700">Wrong</p>
+                              <p className="text-sm font-semibold text-rose-600">{result?.wrongAnswers ?? 0}</p>
+                            </div>
+                          </div>
+
+                          {/* Additional Details */}
+                          <div className="grid grid-cols-2 gap-3 mb-3 pb-3 border-b border-green-100">
+                            <div>
+                              <p className="text-xs font-medium text-green-700">Attempted</p>
+                              <p className="text-sm text-gray-700">{attempt ? attempt.answers.length : 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-green-700">Tab Switches</p>
+                              <p className="text-sm text-gray-700">{attempt?.tabSwitches ?? 0}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-green-700">College</p>
+                              <p className="text-sm text-gray-700">{c.college}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-green-700">USN</p>
+                              <p className="text-sm text-gray-700">{c.usn}</p>
+                            </div>
+                          </div>
+
+                          {/* Department and Section */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <p className="text-xs font-medium text-green-700">Dept</p>
+                              <p className="text-sm text-gray-700">{c.department}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-green-700">Section</p>
+                              <p className="text-sm text-gray-700">{c.section}</p>
+                            </div>
+                          </div>
+
+                          {/* Section-wise Scores */}
+                          {attempt && (
+                            <div className="mt-3 pt-3 border-t border-green-100">
+                              <p className="text-xs font-medium text-green-700 mb-2">Section-wise</p>
+                              <p className="text-xs text-gray-700 break-words">{getSectionScoresText(attempt)}</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>

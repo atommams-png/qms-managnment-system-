@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM Code Exam Guard - MySQL Database Setup Script
+REM ATOM QMS - MySQL Database Setup Script
 REM ============================================================
 REM This script automates the database setup for Windows
 REM Prerequisites: MySQL server installed and running
@@ -9,7 +9,7 @@ setlocal enabledelayedexpansion
 
 echo.
 echo ============================================================
-echo Code Exam Guard - MySQL Database Setup
+echo ATOM QMS - MySQL Database Setup
 echo ============================================================
 echo.
 

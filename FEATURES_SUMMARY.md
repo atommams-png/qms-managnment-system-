@@ -2,7 +2,7 @@
 
 ## ✅ Implementation Complete
 
-Your Code Exam Guard system now has **professional, colorful Excel reporting** with tab switch tracking and detailed analytics!
+Your ATOM QMS system now has **professional, colorful Excel reporting** with tab switch tracking and detailed analytics!
 
 ---
 

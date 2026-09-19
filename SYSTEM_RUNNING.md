@@ -16,7 +16,7 @@
    Port: 8080
 
 ✅ MySQL Database
-   Database: code_exam_guard
+   Database: atom_qms
    Status: CONNECTED ✓
    Tables: 6 (all created)
 
@@ -76,7 +76,7 @@ Updated files:
 
 🎊 YOU'RE ALL SET!
 
-Your Code Exam Guard application is now:
+Your ATOM QMS application is now:
 ✅ Running
 ✅ Connected to MySQL
 ✅ Ready for use
@@ -86,7 +86,7 @@ Start managing exams now!
 
 ═══════════════════════════════════════════════════════════════════════════════
 
-DATABASE: MySQL code_exam_guard (root/12345)
+DATABASE: MySQL atom_qms (root/12345)
 BACKEND:  http://localhost:5001
 FRONTEND: http://localhost:8080
 LOGIN:    admin/admin123

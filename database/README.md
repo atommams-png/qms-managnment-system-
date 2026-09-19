@@ -1,8 +1,8 @@
-# Code Exam Guard - MySQL Database Setup Guide
+# ATOM QMS - MySQL Database Setup Guide
 
 ## Overview
 
-This directory contains all MySQL database-related files for the Code Exam Guard project. The application currently uses localStorage for data storage, but these files provide a production-ready MySQL database schema for deployment and scaling.
+This directory contains all MySQL database-related files for the ATOM QMS project. The application currently uses localStorage for data storage, but these files provide a production-ready MySQL database schema for deployment and scaling.
 
 ## Files in This Directory
 

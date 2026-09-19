@@ -57,7 +57,7 @@ npm run dev
 - **Type**: MySQL
 - **Host**: localhost
 - **Port**: 3306
-- **Database**: code_exam_guard
+- **Database**: atom_qms
 - **User**: root
 - **Password**: 12345
 

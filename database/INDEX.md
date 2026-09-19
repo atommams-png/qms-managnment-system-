@@ -1,8 +1,8 @@
-# 📚 Code Exam Guard - MySQL Database Setup - Complete Index
+# 📚 ATOM QMS - MySQL Database Setup - Complete Index
 
 ## 📦 What You've Received
 
-A complete, production-ready MySQL database implementation for your Code Exam Guard exam management system. 8 files totaling ~88KB of documentation, schemas, and code.
+A complete, production-ready MySQL database implementation for your ATOM QMS exam management system. 8 files totaling ~88KB of documentation, schemas, and code.
 
 ## 📑 File Reference Guide
 
@@ -284,7 +284,7 @@ const exam = await db.createExam('Biology 101', settings);
 
 ```bash
 # Create database
-mysql -u root -p -e "CREATE DATABASE code_exam_guard;"
+mysql -u root -p -e "CREATE DATABASE atom_qms;"
 
 # Load schema
 mysql -u root -p code_exam_guard < database/schema.sql
@@ -293,7 +293,7 @@ mysql -u root -p code_exam_guard < database/schema.sql
 mysql -u root -p code_exam_guard < database/seed-data.sql
 
 # Verify tables
-mysql -u root -p code_exam_guard -e "SHOW TABLES;"
+mysql -u root -p atom_qms -e "SHOW TABLES;"
 
 # Check views
 mysql -u root -p code_exam_guard -e "SELECT * FROM v_exam_statistics;"
@@ -418,4 +418,4 @@ Total:                    ~88 KB
 
 **Security:** Enterprise-grade recommendations included
 
-Good luck with your Code Exam Guard database implementation! 🎓📚
+Good luck with your ATOM QMS database implementation! 🎓📚

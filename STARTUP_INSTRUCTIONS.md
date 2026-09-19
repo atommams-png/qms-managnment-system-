@@ -30,7 +30,7 @@ npm run dev
 
 You should see:
   ✓ Database connection successful
-  ✓ 🚀 Code Exam Guard Backend API
+  ✓ 🚀 ATOM QMS Backend API
   ✓ Server running on: http://localhost:5001
 
 IMPORTANT: Keep this terminal open and running!
@@ -89,7 +89,7 @@ Database:
   Port: 3306
   User: root
   Password: 12345
-  Database: code_exam_guard
+  Database: atom_qms
 
 Backend:
   Host: localhost

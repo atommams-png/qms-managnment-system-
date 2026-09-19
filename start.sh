@@ -1,8 +1,8 @@
 #!/bin/bash
-# Code Exam Guard - Quick Start Script
+# ATOM QMS - Quick Start Script
 
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║     🚀 Code Exam Guard - MySQL Edition                   ║"
+echo "║     🚀 ATOM QMS - MySQL Edition                       ║"
 echo "║     Quick Start Script                                    ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo ""
@@ -59,7 +59,7 @@ echo "╚═══════════════════════�
 echo ""
 echo -e "${GREEN}📱 Frontend:${NC}  http://localhost:5173"
 echo -e "${GREEN}🔌 Backend API:${NC}  http://localhost:5000/api"
-echo -e "${GREEN}📊 Database:${NC}   localhost:3306/code_exam_guard"
+echo -e "${GREEN}📊 Database:${NC}   localhost:3306/atom_qms"
 echo ""
 echo -e "${YELLOW}📝 Admin Login:${NC}"
 echo "   Username: admin"

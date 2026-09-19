@@ -22,7 +22,7 @@ const MYSQL_HOST = process.env.DB_HOST || 'localhost';
 const MYSQL_USER = process.env.DB_USER || 'root';
 const MYSQL_PASSWORD = process.env.DB_PASSWORD || '12345';
 const MYSQL_PORT = process.env.DB_PORT || 3306;
-const DATABASE_NAME = process.env.DB_NAME || 'code_exam_guard';
+const DATABASE_NAME = process.env.DB_NAME || 'atom_qms';
 
 async function initializeDatabase() {
   let connection = null;

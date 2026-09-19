@@ -99,6 +99,11 @@ const AdminDashboard = () => {
     toast.success('Exam code copied!');
   };
 
+  const copyLink = (link: string) => {
+    navigator.clipboard.writeText(link);
+    toast.success('Link copied!');
+  };
+
   const handleToggle = async (id: string) => {
     try {
       await toggleExamActive(id);
@@ -153,7 +158,7 @@ const AdminDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen pt-20 bg-background">
+    <div className="min-h-screen pt-4 bg-background">
       <Header title="Admin Portal">
         <Button onClick={() => navigate('/admin/create-exam')} size="sm">
           <Plus className="mr-1.5 h-4 w-4" /> New Exam
@@ -163,10 +168,10 @@ const AdminDashboard = () => {
         </Button>
       </Header>
 
-      <main className="container py-8 space-y-8 animate-fade-in">
+      <main className="container py-6 space-y-6 animate-fade-in">
         {/* Stats */}
         <div className="grid gap-4 sm:grid-cols-3">
-          <Card>
+          <Card className="stat-card">
             <CardContent className="flex items-center gap-4 p-6">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
                 <FileText className="h-6 w-6 text-primary" />
@@ -177,7 +182,7 @@ const AdminDashboard = () => {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="stat-card">
             <CardContent className="flex items-center gap-4 p-6">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
                 <Users className="h-6 w-6 text-accent" />
@@ -188,7 +193,7 @@ const AdminDashboard = () => {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="stat-card">
             <CardContent className="flex items-center gap-4 p-6">
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-success/10">
                 <Trophy className="h-6 w-6 text-success" />
@@ -302,13 +307,34 @@ const AdminDashboard = () => {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <code className="rounded bg-muted px-2 py-1 font-mono text-sm font-semibold">
-                        {exam.code}
-                      </code>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyCode(exam.code)}>
-                        <Copy className="h-3.5 w-3.5" />
-                      </Button>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <code className="rounded bg-muted px-2 py-1 font-mono text-sm font-semibold">
+                          {exam.code}
+                        </code>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyCode(exam.code)}>
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-2">
+                        <a
+                          href={`${typeof window !== 'undefined' ? window.location.origin : ''}/exam/${exam.code}/register`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="break-all hover:underline"
+                          title={`Open registration for ${exam.code}`}
+                        >
+                          {`${typeof window !== 'undefined' ? window.location.origin : ''}/exam/${exam.code}/register`}
+                        </a>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => copyLink(`${typeof window !== 'undefined' ? window.location.origin : ''}/exam/${exam.code}/register`)}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="text-sm text-muted-foreground space-y-1">
                       <p>{exam.questionCount ?? exam.questions?.length ?? 0} questions · {exam.settings?.duration ?? 'N/A'} min</p>

@@ -2,7 +2,7 @@
 
 ## ✅ Mission Accomplished
 
-Your **Code Exam Guard** project has been successfully migrated from browser local storage to a MySQL database. All data is now persistent, secure, and ready for production.
+Your **ATOM QMS** project has been successfully migrated from browser local storage to a MySQL database. All data is now persistent, secure, and ready for production.
 
 ---
 
@@ -102,7 +102,7 @@ Password: admin123
 Type:     MySQL
 Host:     localhost
 Port:     3306
-Database: code_exam_guard
+Database: atom_qms
 User:     root
 Password: 12345
 ```
@@ -383,4 +383,4 @@ npm run dev              # Terminal 2
 **Node.js**: v16+
 **React**: v18+
 
-**Code Exam Guard is now powered by MySQL! 🎉**
+**ATOM QMS is now powered by MySQL! 🎉**

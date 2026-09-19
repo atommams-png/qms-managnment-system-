@@ -37,7 +37,11 @@ const AdminLogin = () => {
 
   return (
     <div className="min-h-screen pt-20 bg-background">
-      <Header title="Admin Login" />
+      <Header title="Admin Login">
+        <Button variant="default" size="sm" onClick={() => navigate('/')} className="ml-2">
+          Back
+        </Button>
+      </Header>
       <div className="flex items-center justify-center p-4">
         <Card className="w-full max-w-md animate-fade-in">
           <CardHeader className="text-center">

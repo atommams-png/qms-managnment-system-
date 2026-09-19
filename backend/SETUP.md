@@ -1,9 +1,9 @@
-# Code Exam Guard Backend - Setup Guide
+# ATOM QMS Backend - Setup Guide
 
 ## ✅ Prerequisites
 
 Before starting the backend, ensure:
-- ✓ MySQL database `code_exam_guard` is created with all tables
+- ✓ MySQL database `atom_qms` is created with all tables
 - ✓ Node.js is installed (v14 or higher)
 - ✓ npm is installed
 
@@ -44,7 +44,7 @@ Expected content:
 DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=12345
-DB_NAME=code_exam_guard
+DB_NAME=atom_qms
 PORT=5000
 NODE_ENV=development
 CORS_ORIGIN=http://localhost:5173,http://localhost:3000
@@ -79,11 +79,11 @@ npm start
 You should see:
 ```
 ✓ Database connection successful
-🚀 Code Exam Guard Backend API
+🚀 ATOM QMS Backend API
 
 Server running on: http://localhost:5000
 Environment: development
-Database: code_exam_guard
+Database: atom_qms
 
 Health Check: GET /api/health
 API Docs: See routes/ folder

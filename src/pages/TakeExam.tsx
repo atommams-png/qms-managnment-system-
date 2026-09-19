@@ -92,12 +92,19 @@ const TakeExam = () => {
         setPassageMap(pMap);
 
         const att = await startAttempt(candidateId, examId);
+        if (!att) {
+          toast.error('Failed to start exam. You may have already attempted this exam.');
+          navigate('/');
+          return;
+        }
         setAttempt(att);
         attemptRef.current = att;
 
-        // Fullscreen
+        // Fullscreen (only works if triggered by user gesture, will fail silently)
         if (e.settings.fullscreenMode) {
-          document.documentElement.requestFullscreen?.().catch(() => {});
+          // Note: Fullscreen request must be triggered by user interaction (e.g., button click)
+          // Not from useEffect. This will be attempted when questions are displayed.
+          // document.documentElement.requestFullscreen?.().catch(() => {});
         }
       } catch (error) {
         console.error('Error initializing exam:', error);
@@ -176,16 +183,19 @@ const TakeExam = () => {
     }
 
     try {
+      // Sanitize answers to only include safe, serializable fields
       const answersWithTime = answers.map(a => ({
-        ...a,
+        questionId: a.questionId,
+        selectedAnswer: a.selectedAnswer,
         timeSpentSeconds: Math.max(0, Math.round(questionTimesRef.current[a.questionId] || 0)),
       }));
 
-      att.answers = answersWithTime;
-      att.submittedAt = new Date().toISOString();
-      att.tabSwitches = finalTabSwitches;
-      att.isSubmitted = true;
-      await updateAttempt(att);
+      // Quick debug: log answers shape to catch any accidental DOM / event objects
+      // (remove this log after debugging in development)
+      // eslint-disable-next-line no-console
+      console.debug('Submitting answersWithTime:', answersWithTime);
+
+      // Only pass the specific fields needed, not the entire attempt object (which has circular refs)
       const result = await submitAttempt(att.id, answersWithTime, finalTabSwitches);
       if (!result) {
         toast.error('Failed to generate result. Please try again.');
@@ -353,6 +363,12 @@ const TakeExam = () => {
   }, [submitted]);
 
   const selectAnswer = (index: number) => {
+    // Try fullscreen on first interaction if enabled
+    if (exam?.settings.fullscreenMode && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {
+        // Silently fail - browser may not allow fullscreen
+      });
+    }
     setAnswers(prev => prev.map((a, i) => i === currentQ ? { ...a, selectedAnswer: index } : a));
   };
 
@@ -381,7 +397,7 @@ const TakeExam = () => {
   const displayOptions = q.type === 'true-false' ? q.options.slice(0, 2) : q.options;
 
   return (
-    <div className="flex min-h-screen flex-col pt-20 bg-background">
+    <div className="flex min-h-screen flex-col bg-background">
       {/* Tab Switch Alert - Middle of Screen */}
       {showTabSwitchAlert && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-300">
@@ -427,26 +443,59 @@ const TakeExam = () => {
       )}
 
       <Header
-        className="sticky top-0 z-50 shadow-sm"
+        className="sticky top-0 z-40 shadow-sm compact"
         title={exam.name}
         leftChildren={
-          <div className="ml-4">
-            <p className="text-sm text-muted-foreground">Q {currentQ + 1} of {questions.length}</p>
+          <div className="hidden sm:block ml-2">
+            <p className="text-xs sm:text-sm text-muted-foreground">Q {currentQ + 1} of {questions.length}</p>
           </div>
         }
       >
         {tabSwitches > 0 && (
-          <Badge variant="destructive" className="text-xs">
-            <AlertTriangle className="mr-1 h-3 w-3" /> {tabSwitches} tab switch{tabSwitches > 1 ? 'es' : ''}
+          <Badge variant="destructive" className="text-xs hidden sm:flex">
+            <AlertTriangle className="mr-1 h-3 w-3" /> {tabSwitches}
           </Badge>
         )}
-        <div className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 font-mono text-sm font-bold ${isLowTime ? 'bg-destructive/10 text-destructive timer-pulse' : isWarnTime ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
-          <Clock className="h-4 w-4" />
+        <div className={`flex items-center gap-1.5 rounded-lg px-2 sm:px-3 py-1 sm:py-1.5 font-mono text-xs sm:text-sm font-bold ${isLowTime ? 'bg-destructive/10 text-destructive timer-pulse' : isWarnTime ? 'bg-warning/10 text-warning' : 'bg-success/10 text-success'}`}>
+          <Clock className="h-3 sm:h-4 w-3 sm:w-4" />
           {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
         </div>
       </Header>
 
-      <div className="flex flex-1 container py-6 gap-6">
+      {/* Mobile-only Question Navigator (immediately below header) */}
+      {exam.settings.navigationPanel && (
+        <div className="lg:hidden w-full px-2 sm:px-4">
+          <div className="mx-auto w-full max-w-6xl">
+            <div className="mt-2 mb-3 pb-4 border-b border-border">
+              <p className="mb-3 text-xs font-semibold text-muted-foreground uppercase">Question Navigator</p>
+              <div className="grid grid-cols-6 gap-2">
+                {questions.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => navigateToQuestion(i)}
+                    className={`flex h-9 w-9 items-center justify-center rounded-md text-xs font-semibold transition-all ${
+                      i === currentQ
+                        ? 'bg-primary text-primary-foreground ring-2 ring-primary/50'
+                        : answers[i]?.selectedAnswer !== null
+                        ? 'bg-success/20 text-success border-2 border-success/40 hover:bg-success/30'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-border'
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-primary" /> Current</div>
+                <div className="flex items-center gap-2"><div className="h-3 w-3 rounded border border-success/40 bg-success/20" /> Answered</div>
+                <div className="flex items-center gap-2"><div className="h-3 w-3 rounded border border-border bg-muted" /> Unanswered</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-1 flex-col lg:flex-row mx-auto px-2 sm:px-4 py-4 sm:py-6 gap-4 sm:gap-6 w-full max-w-6xl">
         {/* Question Area */}
         <div className="flex-1 space-y-6">
           <Card>
@@ -487,15 +536,16 @@ const TakeExam = () => {
                   </button>
                 ))}
               </div>
+              
             </CardContent>
           </Card>
 
-          <div className="flex items-center justify-between">
+          <div className="flex w-full flex-col sm:flex-row items-center sm:justify-between gap-3">
             <Button variant="outline" onClick={() => navigateToQuestion(currentQ - 1)} disabled={currentQ === 0}>
               <ChevronLeft className="mr-1 h-4 w-4" /> Previous
             </Button>
             {currentQ === questions.length - 1 ? (
-              <Button onClick={handleSubmit} className="bg-success hover:bg-success/90 text-success-foreground">
+              <Button onClick={() => handleSubmit()} className="bg-success hover:bg-success/90 text-success-foreground">
                 <Send className="mr-1.5 h-4 w-4" /> Submit Exam
               </Button>
             ) : (
@@ -506,9 +556,9 @@ const TakeExam = () => {
           </div>
         </div>
 
-        {/* Navigation Panel */}
+        {/* Navigation Panel - Desktop Only */}
         {exam.settings.navigationPanel && (
-          <div className="hidden w-64 shrink-0 lg:block">
+          <div className="hidden w-64 shrink-0 lg:block pt-2">
             <Card className="sticky top-20">
               <CardContent className="pt-6">
                 <p className="mb-3 text-sm font-semibold">Question Navigator</p>

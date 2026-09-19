@@ -2,7 +2,7 @@
 
 ## 🎉 Summary
 
-Your Code Exam Guard project has been successfully migrated from **browser local storage** to **MySQL database**. All data is now persistent and stored on the server.
+Your ATOM QMS project has been successfully migrated from **browser local storage** to **MySQL database**. All data is now persistent and stored on the server.
 
 ---
 

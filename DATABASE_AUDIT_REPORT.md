@@ -1,7 +1,7 @@
 # 🔍 Database Connection & Storage Audit Report
 
 **Date:** March 30, 2026
-**Project:** Code Exam Guard
+**Project:** ATOM QMS
 **Status:** ⚠️ **PARTIALLY COMPLIANT** (See Issues Below)
 
 ---
@@ -13,7 +13,7 @@
 ```javascript
 - Host: process.env.DB_HOST (default: localhost)
 - User: process.env.DB_USER (default: root)
-- Database: process.env.DB_NAME (default: code_exam_guard)
+- Database: process.env.DB_NAME (default: atom_qms)
 - Connection pooling: 10 connections
 - Connection testing: testConnection() function available
 ```

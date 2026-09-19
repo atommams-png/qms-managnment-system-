@@ -1,5 +1,5 @@
 -- ============================================================
--- CODE EXAM GUARD - MySQL Database Schema
+-- ATOM QMS - MySQL Database Schema
 -- ============================================================
 -- This schema defines all tables required for the exam management system
 -- Created: 2026-03-13

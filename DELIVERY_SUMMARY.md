@@ -2,7 +2,7 @@
 
 ## ✅ Everything is Ready!
 
-Your **Code Exam Guard** system now has a **complete, professional Excel reporting system** with colorful formatting, security tracking, and comprehensive documentation!
+Your **ATOM QMS** system now has a **complete, professional Excel reporting system** with colorful formatting, security tracking, and comprehensive documentation!
 
 ---
 
@@ -373,7 +373,7 @@ TIME SAVED: 90%+ 🚀
 ## 📖 Documentation Tree
 
 ```
-📂 Code Exam Guard
+📂 ATOM QMS
 │
 ├─ 📄 QUICK_REFERENCE.md ⭐ START HERE
 │  └─ 2-minute quick guide

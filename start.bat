@@ -1,9 +1,9 @@
 @echo off
-REM Code Exam Guard - Quick Start Script for Windows
+REM ATOM QMS - Quick Start Script for Windows
 
 echo.
 echo ╔════════════════════════════════════════════════════════════╗
-echo ║     🚀 Code Exam Guard - MySQL Edition                   ║
+echo ║     🚀 ATOM QMS - MySQL Edition                       ║
 echo ║     Quick Start Script                                    ║
 echo ╚════════════════════════════════════════════════════════════╝
 echo.
@@ -45,7 +45,7 @@ echo.
 
 REM Step 2: Start backend
 echo 📌 Step 2: Starting backend server...
-start "Backend - Code Exam Guard" npm run dev
+start "Backend - ATOM QMS" npm run dev
 echo ✓ Backend starting on port 5000
 timeout /t 2 /nobreak
 cd ..
@@ -53,7 +53,7 @@ echo.
 
 REM Step 3: Start frontend
 echo 📌 Step 3: Starting frontend application...
-start "Frontend - Code Exam Guard" npm run dev
+start "Frontend - ATOM QMS" npm run dev
 echo ✓ Frontend starting on port 5173
 echo.
 
@@ -65,7 +65,7 @@ echo ╚════════════════════════
 echo.
 echo 📱 Frontend:   http://localhost:5173
 echo 🔌 Backend API: http://localhost:5000/api
-echo 📊 Database:   localhost:3306/code_exam_guard
+echo 📊 Database:   localhost:3306/atom_qms
 echo.
 echo 📝 Admin Login:
 echo    Username: admin

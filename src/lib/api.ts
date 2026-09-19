@@ -407,12 +407,17 @@ export async function isDuplicateCandidate(examId: string, usn: string, departme
 
 export async function startAttempt(candidateId: string, examId: string) {
   try {
+    console.log('Starting attempt with:', { candidateId, examId });
     const res = await fetch(`${API_URL}/attempts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ candidateId, examId })
     });
     const data = await res.json();
+    if (!res.ok) {
+      console.error('Start attempt failed:', data.error || data);
+      return null;
+    }
     return data.data ? toAttempt(data.data) : null;
   } catch (error) {
     console.error('Start attempt error:', error);
@@ -436,10 +441,32 @@ export async function updateAttempt(attemptId: string, answers: any[], tabSwitch
 
 export async function submitAttempt(attemptId: string, answers: any[], tabSwitches?: number) {
   try {
+    // Defensively sanitize answers to prevent circular references or DOM nodes
+    const sanitizedAnswers = (answers || []).map((a: any) => ({
+      questionId: String(a?.questionId ?? ''),
+      selectedAnswer: a?.selectedAnswer == null ? null : Number(a.selectedAnswer),
+      timeSpentSeconds: Number(a?.timeSpentSeconds ?? 0),
+    }));
+
+    let body: string;
+    try {
+      body = JSON.stringify({ answers: sanitizedAnswers, tabSwitches });
+    } catch (err) {
+      console.error('Failed to stringify answers for submitAttempt. Dumping entries for debugging:');
+      sanitizedAnswers.forEach((entry: any, idx: number) => {
+        try {
+          JSON.stringify(entry);
+        } catch (e) {
+          console.error(`Non-serializable answer at index ${idx}:`, entry);
+        }
+      });
+      throw err;
+    }
+
     const res = await fetch(`${API_URL}/attempts/${attemptId}/submit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers, tabSwitches })
+      body
     });
     const data = await res.json();
     return data.data ? toResult(data.data) : null;

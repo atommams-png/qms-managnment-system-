@@ -113,10 +113,20 @@ const CandidateRegister = () => {
       return;
     }
 
+    // Enter fullscreen immediately from the user gesture before any async work starts.
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {
+        // Browser may block fullscreen; exam can still proceed.
+      });
+    }
+
     // Check for duplicate candidate with same USN and Department
     const isDuplicate = await isDuplicateCandidate(exam.id, form.usn, form.department);
     if (isDuplicate) {
       toast.error('A student with this USN and Department has already registered for this exam');
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+      }
       return;
     }
 
@@ -126,6 +136,9 @@ const CandidateRegister = () => {
       navigate(`/exam/${code}/take`, { state: { candidateId: candidate.id, examId: exam.id } });
     } else {
       toast.error('Registration failed');
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+      }
     }
   };
 

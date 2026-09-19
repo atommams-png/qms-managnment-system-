@@ -203,7 +203,7 @@ Example: Java_Basics_Report_2026-04-06.xlsx
 
 ## ✨ Professional Touches
 
-✅ Logo header: "CODE EXAM GUARD" on each sheet  
+✅ Logo header: "ATOM QMS" on each sheet  
 ✅ Sheet-specific titles below logo  
 ✅ Merged header cells for unity  
 ✅ Professional spacing & alignment  
@@ -240,4 +240,4 @@ Example: Java_Basics_Report_2026-04-06.xlsx
 **Format:** XLSX (Excel 2013 and newer)  
 **Compatibility:** Excel, LibreOffice, Google Sheets  
 
-**Created by:** CODE EXAM GUARD System
+**Created by:** ATOM QMS System

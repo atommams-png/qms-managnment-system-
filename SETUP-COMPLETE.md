@@ -21,7 +21,7 @@ npm run dev
 You should see:
 ```
 ✓ Database connection successful
-🚀 Code Exam Guard Backend API
+🚀 ATOM QMS Backend API
 Server running on: http://localhost:5000
 ```
 

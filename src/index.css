@@ -115,6 +115,24 @@
   .card-hover {
     @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
   }
+  /* Dashboard specific micro-interactions (keep color/theme intact) */
+  .stat-card {
+    @apply transform-gpu transition-all duration-300;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.04);
+  }
+  .stat-card:hover {
+    transform: translateY(-6px) scale(1.02);
+    box-shadow: 0 18px 40px rgba(0,0,0,0.08);
+  }
+
+  .exam-card {
+    @apply transition-all duration-300;
+    transform-origin: center;
+  }
+  .exam-card:hover {
+    transform: translateY(-8px) rotateX(1deg) scale(1.01);
+    box-shadow: 0 22px 48px rgba(0,0,0,0.08);
+  }
   .glass {
     @apply bg-card/80 backdrop-blur-sm border border-border/50;
   }

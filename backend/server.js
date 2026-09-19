@@ -124,7 +124,7 @@ async function startServer() {
       console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
-║     🚀 Code Exam Guard Backend API                        ║
+║     🚀 ATOM QMS Backend API                               ║
 ║                                                            ║
 ║     Server running on: http://localhost:${PORT}           ║
 ║     Environment: ${process.env.NODE_ENV || 'development'}

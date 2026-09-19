@@ -1,4 +1,4 @@
-# 🚀 Code Exam Guard - Ready to Setup
+# 🚀 ATOM QMS - Ready to Setup
 
 ## Your Database Credentials
 
@@ -321,7 +321,7 @@ mysql -u root -p12345 code_exam_guard < database/schema.sql
 
 ## 🎉 You're All Set!
 
-Your MySQL database is now ready for the Code Exam Guard project.
+Your MySQL database is now ready for the ATOM QMS project.
 
 **Next Step:** Choose your setup method above and follow the instructions.
 

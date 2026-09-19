@@ -209,6 +209,6 @@ Average = Total Time Spent / Total Attempts
 
 - All color coding follows accessibility best practices
 - Yellow used for unattempted (clear visibility on white background)
-- Headers use CODE EXAM GUARD branding (#008037 green)
+- Headers use ATOM QMS branding (#008037 green)
 - Columns auto-size for readability
 - Data filtered consistently across all sheets

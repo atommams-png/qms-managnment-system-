@@ -1,5 +1,5 @@
 ═══════════════════════════════════════════════════════════════════════════════
-                       🚀 CODE EXAM GUARD - START HERE 🚀
+                       🚀 ATOM QMS - START HERE 🚀
 ═══════════════════════════════════════════════════════════════════════════════
 
 ✅ MIGRATION COMPLETE: Local Storage → MySQL Database
@@ -64,7 +64,7 @@ Host:     localhost
 Port:     3306
 User:     root
 Password: 12345
-Database: code_exam_guard
+Database: atom_qms
 
 Tables:   6 (admins, exams, questions, candidates, exam_attempts, exam_results)
 Status:   ✅ CREATED & WORKING

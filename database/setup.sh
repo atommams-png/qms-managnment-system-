@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ============================================================
-# Code Exam Guard - MySQL Database Setup Script
+# ATOM QMS - MySQL Database Setup Script
 # ============================================================
 # This script automates the database setup for Linux/Mac
 # Prerequisites: MySQL server installed and running
@@ -15,12 +15,12 @@ NC='\033[0m' # No Color
 # Configuration
 DB_USER="root"
 DB_PASSWORD="12345"
-DB_NAME="code_exam_guard"
+DB_NAME="atom_qms"
 DB_HOST="localhost"
 
 echo ""
 echo "============================================================"
-echo "Code Exam Guard - MySQL Database Setup"
+echo "ATOM QMS - MySQL Database Setup"
 echo "============================================================"
 echo ""
 

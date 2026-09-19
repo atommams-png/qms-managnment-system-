@@ -1,7 +1,7 @@
-# Project Analysis - Code Exam Guard
+# Project Analysis - ATOM QMS
 
 ## Overview
-Code Exam Guard is a web-based exam platform with:
+ATOM QMS is a web-based exam platform with:
 - **Backend:** Node.js + Express + MySQL
 - **Frontend:** React + TypeScript (Vite)
 - **Architecture:** REST API + Database-driven (NOT in-memory)

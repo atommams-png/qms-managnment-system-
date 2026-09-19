@@ -1,8 +1,8 @@
-# 🎯 Quick Start Guide - MySQL Setup for Code Exam Guard
+# 🌟 Quick Start Guide - MySQL Setup for ATOM QMS
 
 ## What Was Created
 
-I've created a complete MySQL database infrastructure for your Code Exam Guard project. Here are all the files:
+I've created a complete MySQL database infrastructure for your ATOM QMS project. Here are all the files:
 
 ```
 database/

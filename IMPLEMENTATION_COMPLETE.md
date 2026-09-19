@@ -481,7 +481,7 @@ Status: ✔️ RUNNING
 
 ## 🎊 Conclusion
 
-Your Code Exam Guard system is now equipped with:
+Your ATOM QMS system is now equipped with:
 
 ✅ **Professional Excel reporting** (7 detailed sheets)
 ✅ **Security tracking** (tab switch detection)

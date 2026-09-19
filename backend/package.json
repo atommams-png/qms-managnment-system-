@@ -1,7 +1,7 @@
 {
-  "name": "code-exam-guard-backend",
+  "name": "atom-qms-backend",
   "version": "1.0.0",
-  "description": "Backend API for Code Exam Guard",
+  "description": "Backend API for ATOM QMS",
   "main": "server.js",
   "type": "module",
   "scripts": {

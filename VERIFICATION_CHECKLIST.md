@@ -47,7 +47,7 @@ npm run init:db
 **Expected Output:**
 ```
 ✅ Step 1: Connecting to MySQL server...
-✅ Step 2: Creating database "code_exam_guard"...
+✅ Step 2: Creating database "atom_qms"...
 ✅ Step 3: Selecting database...
 ✅ Step 4: Running database schema...
 ✅ Step 5: Inserting default admin user...
@@ -66,10 +66,10 @@ npm run dev
 ```
 ✓ Database connection successful
 ╔════════════════════════════════════════════════════════════╗
-║     🚀 Code Exam Guard Backend API                        ║
+║     🚀 ATOM QMS Backend API                        ║
 ║     Server running on: http://localhost:5000             ║
 ║     Environment: development                              ║
-║     Database: code_exam_guard                             ║
+║     Database: atom_qms                             ║
 ╚════════════════════════════════════════════════════════════╝
 ```
 

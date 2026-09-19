@@ -174,7 +174,7 @@ function getAttemptMetrics(attempt: ExamAttempt, exam: Exam) {
  * Helper: Determine submission status
  */
 function getSubmissionStatus(attempt: ExamAttempt, exam: Exam): 'Normal Submit' | 'Limit Exceeded' {
-  if (attempt.tabSwitches >= exam.settings.maxTabSwitches) {
+  if ((exam.settings.maxTabSwitches ?? 0) > 0 && attempt.tabSwitches >= exam.settings.maxTabSwitches) {
     return 'Limit Exceeded';
   }
   return 'Normal Submit';
@@ -305,7 +305,7 @@ export async function exportExamResultsToExcel(
     wb,
     resultsSheet,
     logoBuffer,
-    'ATOM EXAM SYSTEM - EXAM RESULTS',
+    'ATOM QMS - EXAM RESULTS',
     'Candidate Performance Report',
     14
   );
@@ -394,7 +394,7 @@ export async function exportExamResultsToExcel(
 
   // Add footer with branding
   resultsSheet.addRow([]);
-  const footerRow = resultsSheet.addRow(['Powered by ATOM']);
+  const footerRow = resultsSheet.addRow(['Powered by ATOM QMS']);
   footerRow.getCell(1).font = {
     bold: true,
     size: 11,
@@ -413,7 +413,7 @@ export async function exportExamResultsToExcel(
     wb,
     studentQuestionsSheet,
     logoBuffer,
-    'ATOM EXAM SYSTEM - STUDENT QUESTION DETAILS',
+    'ATOM QMS - STUDENT QUESTION DETAILS',
     'Individual Student Response Analysis',
     studentSheetColumnCount
   );
@@ -557,7 +557,7 @@ export async function exportExamResultsToExcel(
 
   // Add footer to Student Questions sheet
   studentQuestionsSheet.addRow([]);
-  const sqFooterRow = studentQuestionsSheet.addRow(['Powered by ATOM']);
+  const sqFooterRow = studentQuestionsSheet.addRow(['Powered by ATOM QMS']);
   sqFooterRow.getCell(1).font = {
     bold: true,
     size: 11,
@@ -575,7 +575,7 @@ export async function exportExamResultsToExcel(
     wb,
     dashboardSheet,
     logoBuffer,
-    'ATOM EXAM SYSTEM - EXAM ANALYTICS',
+    'ATOM QMS - EXAM ANALYTICS',
     'Exam Performance Summary',
     2
   );
@@ -612,7 +612,7 @@ export async function exportExamResultsToExcel(
 
   // Add footer to Overall Analytics sheet
   dashboardSheet.addRow([]);
-  const dashFooterRow = dashboardSheet.addRow(['Powered by ATOM']);
+  const dashFooterRow = dashboardSheet.addRow(['Powered by ATOM QMS']);
   dashFooterRow.getCell(1).font = {
     bold: true,
     size: 11,
