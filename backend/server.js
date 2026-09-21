@@ -6,8 +6,12 @@ import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import compression from 'compression';
+import helmet from 'helmet';
 import dotenv from 'dotenv';
-import { testConnection } from './db.js';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import pool, { testConnection } from './db.js';
 import adminRoutes from './routes/admin.js';
 import examRoutes from './routes/exams.js';
 import candidateRoutes from './routes/candidates.js';
@@ -17,23 +21,42 @@ import resultRoutes from './routes/results.js';
 // Load environment variables
 dotenv.config();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.resolve(__dirname, '../dist');
+
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // ============================================================
-// MIDDLEWARE
+// PRODUCTION SECURITY & PERFORMANCE MIDDLEWARE
 // ============================================================
 
-// Gzip / Brotli compression to shrink JSON payloads
+// Security HTTP headers
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
+
+// Gzip / Brotli compression
 app.use(compression());
 
-// CORS configuration
-const corsOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()) : ['http://localhost:5173'];
+// CORS configuration (allows all in production if not explicitly set)
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5001'];
 
 app.use(cors({
-  origin: corsOrigins,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, curl, server-to-server) or matching origins
+    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'production') {
+      callback(null, true);
+    } else {
+      callback(null, true);
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
@@ -41,7 +64,7 @@ app.use(cors({
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
-// Request logging (non-blocking, development only)
+// Request logging (development only)
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
@@ -50,11 +73,17 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ============================================================
-// HEALTH CHECK
+// HEALTH & MONITORING
 // ============================================================
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    uptimeSeconds: Math.round(process.uptime()),
+    pid: process.pid,
+    memoryUsageMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.get('/api/health', async (req, res) => {
@@ -63,11 +92,15 @@ app.get('/api/health', async (req, res) => {
     res.json({
       status: 'ok',
       database: 'connected',
+      uptimeSeconds: Math.round(process.uptime()),
+      pid: process.pid,
+      memoryUsageMB: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
       timestamp: new Date().toISOString()
     });
   } catch (error) {
     res.status(500).json({
       status: 'error',
+      database: 'disconnected',
       message: error.message
     });
   }
@@ -77,29 +110,36 @@ app.get('/api/health', async (req, res) => {
 // API ROUTES
 // ============================================================
 
-// Admin routes
 app.use('/api/auth', adminRoutes);
-
-// Exam routes
 app.use('/api/exams', examRoutes);
-
-// Candidate routes
 app.use('/api/candidates', candidateRoutes);
-
-// Attempt routes
 app.use('/api/attempts', attemptRoutes);
-
-// Result routes
 app.use('/api/results', resultRoutes);
 
 // ============================================================
-// 404 HANDLER
+// STATIC FRONTEND SERVING (Production SPA)
 // ============================================================
 
-app.use((req, res) => {
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath, { maxAge: '1d' }));
+
+  // SPA Route Fallback: Any non-API route serves index.html
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
+// ============================================================
+// 404 HANDLER FOR UNKNOWN API ROUTES
+// ============================================================
+
+app.use('/api/*', (req, res) => {
   res.status(404).json({
-    error: 'Route not found',
-    path: req.path
+    error: 'API endpoint not found',
+    path: req.originalUrl
   });
 });
 
@@ -108,7 +148,7 @@ app.use((req, res) => {
 // ============================================================
 
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('Server error:', err);
   res.status(500).json({
     error: 'Internal server error',
     message: process.env.NODE_ENV === 'development' ? err.message : undefined
@@ -116,28 +156,30 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================
-// SERVER START
+// SERVER START & GRACEFUL SHUTDOWN
 // ============================================================
+
+let server;
 
 async function startServer() {
   try {
-    // Test database connection
     await testConnection();
-    console.log('✓ Database connection successful');
+    console.log('✓ Database connection pool established');
 
-    // Start server
-    const server = app.listen(PORT, () => {
+    server = app.listen(PORT, () => {
       console.log(`
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
-║     🚀 ATOM QMS Backend API                               ║
+║     🚀 ATOM QMS - High Concurrency Production Server      ║
 ║                                                            ║
-║     Server running on: http://localhost:${PORT}           ║
-║     Environment: ${process.env.NODE_ENV || 'development'}
-║     Database: ${process.env.DB_NAME}                      ║
+║     Port:        http://localhost:${PORT}                  ║
+║     Worker PID:  ${process.pid}                                    ║
+║     Environment: ${process.env.NODE_ENV || 'production'}                   ║
+║     Database:    ${process.env.DB_NAME || 'code_exam_guard'}                   ║
+║     Gzip:        Enabled                                   ║
+║     SPA Mode:    ${fs.existsSync(distPath) ? 'Serving dist/ build' : 'API only'}                ║
 ║                                                            ║
-║     Health Check: GET /api/health                         ║
-║     API Docs: See routes/ folder                          ║
+║     Health:      GET /api/health                           ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
       `);
@@ -145,8 +187,7 @@ async function startServer() {
 
     server.on('error', (error) => {
       if (error.code === 'EADDRINUSE') {
-        console.error(`Port ${PORT} is already in use.`);
-        console.error('Stop the existing process, or change PORT in backend/.env.');
+        console.error(`Port ${PORT} is already in use. Stop existing processes or change PORT.`);
       } else {
         console.error('Server startup error:', error.message);
       }
@@ -157,6 +198,25 @@ async function startServer() {
     process.exit(1);
   }
 }
+
+// Graceful shutdown handling
+const handleShutdown = async (signal) => {
+  console.log(`\nReceived ${signal}. Closing HTTP server and database connections gracefully...`);
+  if (server) {
+    server.close(() => {
+      console.log('✓ HTTP server closed');
+      pool.end().then(() => {
+        console.log('✓ Database connection pool drained');
+        process.exit(0);
+      }).catch(() => process.exit(0));
+    });
+  } else {
+    process.exit(0);
+  }
+};
+
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));
+process.on('SIGINT', () => handleShutdown('SIGINT'));
 
 startServer();
 

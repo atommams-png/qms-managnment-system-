@@ -1,9 +1,24 @@
 // ============================================================
 // API SERVICE - Connects React to MySQL Backend
 // ============================================================
-// Replace all localStorage calls with API calls to backend
 
-const API_URL = 'http://localhost:5001/api';
+const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+    const port = window.location.port;
+    // Vite dev server ports
+    if (port === '5173' || port === '3000' || port === '8080') {
+      return `${protocol}//${hostname}:5001/api`;
+    }
+    // Production (served via Express or reverse proxy on same port)
+    return `${protocol}//${window.location.host}/api`;
+  }
+  return 'http://localhost:5001/api';
+};
+
+const API_URL = getApiBaseUrl();
 
 function toQuestion(question: any) {
   const type = question.type;

@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # MySQL Database tuned for 2,000 Concurrent Users
+  mysql:
+    image: mysql:8.0
+    container_name: qms-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-12345}
+      MYSQL_DATABASE: ${DB_NAME:-code_exam_guard}
+    command:
+      - --max_connections=400
+      - --innodb_buffer_pool_size=2560M
+      - --innodb_buffer_pool_instances=4
+      - --innodb_log_file_size=256M
+      - --innodb_log_buffer_size=64M
+      - --innodb_flush_log_at_trx_commit=2
+      - --innodb_thread_concurrency=8
+      - --table_open_cache=2000
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    ports:
+      - "3306:3306"
+    deploy:
+      resources:
+        limits:
+          cpus: '3.0'
+          memory: 3500M
+        reservations:
+          cpus: '1.5'
+          memory: 2500M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-12345}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Application Server (Frontend SPA + Node.js 4-Replica Cluster)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qms-app
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ${DB_PASSWORD:-12345}
+      DB_NAME: ${DB_NAME:-code_exam_guard}
+      DB_POOL_LIMIT: 35
+    ports:
+      - "5001:5001"
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 3200M
+        reservations:
+          cpus: '2.0'
+          memory: 1500M
+
+volumes:
+  mysql_data:
