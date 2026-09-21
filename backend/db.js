@@ -13,7 +13,7 @@ const pool = mysql.createPool({
   port: parseInt(process.env.MYSQLPORT || process.env.DB_PORT || '3306', 10),
   user: process.env.MYSQLUSER || process.env.DB_USER || 'root',
   password: process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || '',
-  database: process.env.MYSQLDATABASE || process.env.DB_NAME || 'atom_qms',
+  database: process.env.MYSQLDATABASE || process.env.DB_NAME || 'railway',
 
   waitForConnections: true,
 
