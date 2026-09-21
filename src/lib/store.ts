@@ -156,7 +156,7 @@ export async function deleteQuestion(examId: string, questionId: string): Promis
 // CANDIDATES - All operations use API
 // ============================================================
 
-export async function registerCandidate(data: Omit<Candidate, 'id' | 'registeredAt'>): Promise<Candidate | null> {
+export async function registerCandidate(data: Omit<Candidate, 'id' | 'registeredAt'>): Promise<{ success: boolean; data?: Candidate; error?: string }> {
   return await api.registerCandidate(data as any);
 }
 

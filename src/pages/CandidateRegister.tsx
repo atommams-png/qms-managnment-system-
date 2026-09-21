@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getExamByCode, getExamAccessStatus, registerCandidate, isDuplicateCandidate } from '@/lib/store';
+import { getExamByCode, getExamAccessStatus, registerCandidate } from '@/lib/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -120,22 +120,13 @@ const CandidateRegister = () => {
       });
     }
 
-    // Check for duplicate candidate with same USN and Department
-    const isDuplicate = await isDuplicateCandidate(exam.id, form.usn, form.department);
-    if (isDuplicate) {
-      toast.error('A student with this USN and Department has already registered for this exam');
-      if (document.fullscreenElement) {
-        document.exitFullscreen?.().catch(() => {});
-      }
-      return;
-    }
-
-    const candidate = await registerCandidate({ ...form, examId: exam.id });
-    if (candidate) {
+    // Register candidate directly (backend verifies uniqueness via indexed constraint)
+    const res = await registerCandidate({ ...form, examId: exam.id });
+    if (res.success && res.data) {
       toast.success('Registered! Starting exam...');
-      navigate(`/exam/${code}/take`, { state: { candidateId: candidate.id, examId: exam.id } });
+      navigate(`/exam/${code}/take`, { state: { candidateId: res.data.id, examId: exam.id } });
     } else {
-      toast.error('Registration failed');
+      toast.error(res.error || 'Registration failed');
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch(() => {});
       }

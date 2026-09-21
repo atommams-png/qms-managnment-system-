@@ -348,7 +348,8 @@ export async function registerCandidate(data: {
   college?: string;
   usn: string;
   department: string;
-}) {
+  section?: string;
+}): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const res = await fetch(`${API_URL}/candidates`, {
       method: 'POST',
@@ -357,12 +358,12 @@ export async function registerCandidate(data: {
     });
     const result = await res.json();
     if (result.success) {
-      return result.data;
+      return { success: true, data: toCandidate(result.data) };
     }
-    throw new Error(result.error);
-  } catch (error) {
+    return { success: false, error: result.error || 'Registration failed' };
+  } catch (error: any) {
     console.error('Register candidate error:', error);
-    return null;
+    return { success: false, error: error.message || 'Network error during registration' };
   }
 }
 

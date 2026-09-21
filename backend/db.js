@@ -14,8 +14,11 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'atom_qms',
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: parseInt(process.env.DB_POOL_LIMIT || '35', 10),
   queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+  connectTimeout: 10000,
   // Keep DATETIME values in local wall-clock time to avoid UI schedule shifts.
   timezone: 'local'
 });

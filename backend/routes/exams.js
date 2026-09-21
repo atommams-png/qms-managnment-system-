@@ -68,6 +68,24 @@ const toMySqlDateTime = (value) => {
 };
 
 // ============================================================
+// IN-MEMORY EXAM CACHE (Reduces DB query load during exam start)
+// ============================================================
+const examCache = new Map();
+const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
+export const clearExamCache = (examIdOrCode) => {
+  if (!examIdOrCode) {
+    examCache.clear();
+  } else {
+    for (const [key, val] of examCache.entries()) {
+      if (key.includes(examIdOrCode) || (val.data && (val.data.id === examIdOrCode || val.data.code === examIdOrCode))) {
+        examCache.delete(key);
+      }
+    }
+  }
+};
+
+// ============================================================
 // GET ALL EXAMS
 // ============================================================
 router.get('/', async (req, res) => {
@@ -99,6 +117,15 @@ router.get('/', async (req, res) => {
 router.get('/code/:code', async (req, res) => {
   try {
     const { code } = req.params;
+    const cacheKey = `code_${code}`;
+    const cached = examCache.get(cacheKey);
+
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+      return res.json({
+        success: true,
+        data: cached.data
+      });
+    }
 
     const [exams] = await pool.execute(
       'SELECT * FROM exams WHERE code = ? AND is_active = 1',
@@ -125,6 +152,9 @@ router.get('/code/:code', async (req, res) => {
     const exam = exams[0];
     exam.questions = parsedQuestions;
 
+    examCache.set(cacheKey, { timestamp: Date.now(), data: exam });
+    examCache.set(`id_${exam.id}`, { timestamp: Date.now(), data: exam });
+
     res.json({
       success: true,
       data: exam
@@ -141,6 +171,15 @@ router.get('/code/:code', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const cacheKey = `id_${id}`;
+    const cached = examCache.get(cacheKey);
+
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+      return res.json({
+        success: true,
+        data: cached.data
+      });
+    }
 
     const [exams] = await pool.execute(
       'SELECT * FROM exams WHERE id = ?',
@@ -166,6 +205,11 @@ router.get('/:id', async (req, res) => {
 
     const exam = exams[0];
     exam.questions = parsedQuestions;
+
+    examCache.set(cacheKey, { timestamp: Date.now(), data: exam });
+    if (exam.code) {
+      examCache.set(`code_${exam.code}`, { timestamp: Date.now(), data: exam });
+    }
 
     res.json({
       success: true,
@@ -284,6 +328,8 @@ router.put('/:id', async (req, res) => {
       ]
     );
 
+    clearExamCache(id);
+
     res.json({
       success: true,
       message: 'Exam updated successfully'
@@ -305,6 +351,8 @@ router.patch('/:id/toggle', async (req, res) => {
       'UPDATE exams SET is_active = !is_active WHERE id = ?',
       [id]
     );
+
+    clearExamCache(id);
 
     const [updated] = await pool.execute(
       'SELECT is_active FROM exams WHERE id = ?',
@@ -346,6 +394,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     await connection.commit();
+    clearExamCache(id);
 
     res.json({
       success: true,
@@ -421,6 +470,7 @@ router.post('/:examId/questions', async (req, res) => {
         ];
 
     await pool.execute(insertQuery, insertValues);
+    clearExamCache(examId);
 
     res.json({
       success: true,
@@ -476,6 +526,7 @@ router.put('/:examId/questions/:questionId', async (req, res) => {
         ];
 
     await pool.execute(updateQuery, updateValues);
+    clearExamCache(examId);
 
     res.json({
       success: true,
@@ -498,6 +549,8 @@ router.delete('/:examId/questions/:questionId', async (req, res) => {
       'DELETE FROM questions WHERE id = ? AND exam_id = ?',
       [questionId, examId]
     );
+
+    clearExamCache(examId);
 
     res.json({
       success: true,

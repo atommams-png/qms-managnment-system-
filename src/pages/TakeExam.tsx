@@ -5,7 +5,7 @@ import { Exam, ExamAttempt, CandidateAnswer, Question } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, ChevronLeft, ChevronRight, Clock, Send } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Clock, Send, CheckCircle2, RefreshCw, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '@/components/Header';
 
@@ -27,10 +27,16 @@ const TakeExam = () => {
   const [showTabSwitchAlert, setShowTabSwitchAlert] = useState(false);
   const [scheduleMessage, setScheduleMessage] = useState('');
   const [alertTimeoutId, setAlertTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+
   const attemptRef = useRef<ExamAttempt | null>(null);
   const tabSwitchesRef = useRef<number>(0);
   const questionTimesRef = useRef<Record<string, number>>({});
   const questionEnteredAtRef = useRef<number>(Date.now());
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Local storage backup key for crash/reload resilience
+  const storageKey = candidateId && examId ? `exam_progress_${examId}_${candidateId}` : '';
 
   // Initialize exam
   useEffect(() => {
@@ -77,10 +83,6 @@ const TakeExam = () => {
           }
         }
         setQuestions(qs);
-        setAnswers(qs.map(q => ({ questionId: q.id, selectedAnswer: null })));
-        questionTimesRef.current = Object.fromEntries(qs.map(q => [q.id, 0]));
-        questionEnteredAtRef.current = Date.now();
-        setTimeLeft(e.settings.duration * 60);
 
         // Build passage map for reading comprehension
         const pMap: Record<string, string> = {};
@@ -91,21 +93,51 @@ const TakeExam = () => {
         }
         setPassageMap(pMap);
 
+        // Start or resume attempt from backend
         const att = await startAttempt(candidateId, examId);
         if (!att) {
-          toast.error('Failed to start exam. You may have already attempted this exam.');
+          toast.error('Failed to access exam. You may have already submitted this exam.');
           navigate('/');
           return;
         }
         setAttempt(att);
         attemptRef.current = att;
 
-        // Fullscreen (only works if triggered by user gesture, will fail silently)
-        if (e.settings.fullscreenMode) {
-          // Note: Fullscreen request must be triggered by user interaction (e.g., button click)
-          // Not from useEffect. This will be attempted when questions are displayed.
-          // document.documentElement.requestFullscreen?.().catch(() => {});
+        // Restore answers from backend or local storage backup
+        let initialAnswers: CandidateAnswer[] = qs.map(q => ({ questionId: q.id, selectedAnswer: null }));
+        let restoredFromLocal = false;
+
+        if (storageKey) {
+          try {
+            const savedLocal = localStorage.getItem(storageKey);
+            if (savedLocal) {
+              const parsed = JSON.parse(savedLocal);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                initialAnswers = initialAnswers.map(ans => {
+                  const match = parsed.find((p: any) => p.questionId === ans.questionId);
+                  return match && match.selectedAnswer !== null ? { ...ans, selectedAnswer: match.selectedAnswer } : ans;
+                });
+                restoredFromLocal = true;
+              }
+            }
+          } catch {}
         }
+
+        if (Array.isArray(att.answers) && att.answers.length > 0) {
+          initialAnswers = initialAnswers.map(ans => {
+            const match = att.answers.find((a: any) => a.questionId === ans.questionId);
+            return match && match.selectedAnswer !== null ? { ...ans, selectedAnswer: match.selectedAnswer } : ans;
+          });
+          toast.info('Resumed previous exam attempt with saved answers');
+        } else if (restoredFromLocal) {
+          toast.info('Restored saved answers from browser cache');
+        }
+
+        setAnswers(initialAnswers);
+        questionTimesRef.current = Object.fromEntries(qs.map(q => [q.id, 0]));
+        questionEnteredAtRef.current = Date.now();
+        setTimeLeft(e.settings.duration * 60);
+
       } catch (error) {
         console.error('Error initializing exam:', error);
         toast.error('Error loading exam');
@@ -114,7 +146,7 @@ const TakeExam = () => {
     };
 
     initializeExam();
-  }, [candidateId, examId, navigate]);
+  }, [candidateId, examId, navigate, storageKey]);
 
   // Timer
   useEffect(() => {
@@ -205,6 +237,13 @@ const TakeExam = () => {
 
       if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
 
+      // Clean up localStorage backup after successful submission
+      if (storageKey) {
+        try {
+          localStorage.removeItem(storageKey);
+        } catch {}
+      }
+
       // Disable back button after submission
       window.history.pushState(null, '', window.location.href);
       window.addEventListener('popstate', () => {
@@ -218,7 +257,7 @@ const TakeExam = () => {
       toast.error('Error submitting exam');
       setSubmitted(false);
     }
-  }, [answers, submitted, navigate, code, questions, currentQ]);
+  }, [answers, submitted, navigate, code, questions, currentQ, storageKey]);
 
   const navigateToQuestion = (targetIndex: number) => {
     if (targetIndex < 0 || targetIndex >= questions.length || targetIndex === currentQ) return;
@@ -362,6 +401,81 @@ const TakeExam = () => {
     };
   }, [submitted]);
 
+  // Immediate debounced auto-save function
+  const triggerAutoSave = useCallback((updatedAnswers: CandidateAnswer[]) => {
+    if (!attemptRef.current?.id || submitted) return;
+
+    setAutoSaveStatus('saving');
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+
+    autoSaveTimerRef.current = setTimeout(async () => {
+      try {
+        const sanitized = updatedAnswers.map(a => ({
+          questionId: a.questionId,
+          selectedAnswer: a.selectedAnswer
+        }));
+
+        const ok = await updateAttempt({
+          id: attemptRef.current!.id,
+          candidateId: candidateId || '',
+          examId: examId || '',
+          answers: sanitized,
+          tabSwitches: tabSwitchesRef.current,
+          isSubmitted: false
+        } as any);
+
+        if (ok) {
+          setAutoSaveStatus('saved');
+        } else {
+          setAutoSaveStatus('error');
+        }
+      } catch {
+        setAutoSaveStatus('error');
+      }
+    }, 500);
+  }, [candidateId, examId, submitted]);
+
+  // Periodic background sync of answers to backend (with randomized jitter every 25-35s)
+  useEffect(() => {
+    if (submitted || !attempt?.id) return;
+    const intervalTime = 25000 + Math.floor(Math.random() * 10000);
+    const syncInterval = setInterval(() => {
+      if (answers.length > 0 && attemptRef.current?.id) {
+        const sanitized = answers.map(a => ({
+          questionId: a.questionId,
+          selectedAnswer: a.selectedAnswer
+        }));
+        updateAttempt({
+          id: attemptRef.current.id,
+          candidateId: candidateId || '',
+          examId: examId || '',
+          answers: sanitized,
+          tabSwitches: tabSwitchesRef.current,
+          isSubmitted: false
+        } as any).then(ok => {
+          if (ok) setAutoSaveStatus('saved');
+        }).catch(() => {});
+      }
+    }, intervalTime);
+
+    return () => clearInterval(syncInterval);
+  }, [submitted, attempt?.id, answers, candidateId, examId]);
+
+  // Window unload backup protection
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (answers.length > 0 && storageKey) {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(answers));
+        } catch {}
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [answers, storageKey]);
+
   const selectAnswer = (index: number) => {
     // Try fullscreen on first interaction if enabled
     if (exam?.settings.fullscreenMode && !document.fullscreenElement) {
@@ -369,7 +483,29 @@ const TakeExam = () => {
         // Silently fail - browser may not allow fullscreen
       });
     }
-    setAnswers(prev => prev.map((a, i) => i === currentQ ? { ...a, selectedAnswer: index } : a));
+    setAnswers(prev => {
+      const updated = prev.map((a, i) => i === currentQ ? { ...a, selectedAnswer: index } : a);
+      if (storageKey) {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(updated));
+        } catch {}
+      }
+      triggerAutoSave(updated);
+      return updated;
+    });
+  };
+
+  const clearAnswer = () => {
+    setAnswers(prev => {
+      const updated = prev.map((a, i) => i === currentQ ? { ...a, selectedAnswer: null } : a);
+      if (storageKey) {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(updated));
+        } catch {}
+      }
+      triggerAutoSave(updated);
+      return updated;
+    });
   };
 
   if (scheduleMessage) {
@@ -446,8 +582,29 @@ const TakeExam = () => {
         className="sticky top-0 z-40 shadow-sm compact"
         title={exam.name}
         leftChildren={
-          <div className="hidden sm:block ml-2">
-            <p className="text-xs sm:text-sm text-muted-foreground">Q {currentQ + 1} of {questions.length}</p>
+          <div className="flex items-center gap-2 sm:gap-3 ml-2">
+            <div className="hidden sm:block">
+              <p className="text-xs sm:text-sm text-muted-foreground font-medium">Q {currentQ + 1} of {questions.length}</p>
+            </div>
+            {/* Auto-save Status Indicator */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-border/80 bg-muted/60 shadow-xs">
+              {autoSaveStatus === 'saving' ? (
+                <>
+                  <RefreshCw className="h-3 w-3 text-primary animate-spin" />
+                  <span className="text-muted-foreground hidden sm:inline">Saving...</span>
+                </>
+              ) : autoSaveStatus === 'error' ? (
+                <>
+                  <AlertTriangle className="h-3 w-3 text-warning" />
+                  <span className="text-warning hidden sm:inline">Saved offline</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium hidden sm:inline">Auto-saved</span>
+                </>
+              )}
+            </div>
           </div>
         }
       >
@@ -536,7 +693,19 @@ const TakeExam = () => {
                   </button>
                 ))}
               </div>
-              
+
+              {currentAnswer !== null && currentAnswer !== undefined && (
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearAnswer}
+                    className="text-xs text-muted-foreground hover:text-destructive gap-1.5 h-8 px-2.5"
+                  >
+                    <RotateCcw className="h-3 w-3" /> Clear selection
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
 

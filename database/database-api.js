@@ -23,7 +23,7 @@ const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'atom_qms',
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 50,
   queueLimit: 0,
   enableInsecureAuth: false, // Set to true if using old MySQL clients
   timezone: '+00:00' // UTC timezone

@@ -40,7 +40,7 @@ const safeJsonParse = (value, fallback = []) => {
 };
 
 // ============================================================
-// START EXAM ATTEMPT
+// START OR RESUME EXAM ATTEMPT
 // ============================================================
 router.post('/', async (req, res) => {
   try {
@@ -52,12 +52,32 @@ router.post('/', async (req, res) => {
 
     // Check if already attempted
     const [existing] = await pool.execute(
-      'SELECT id FROM exam_attempts WHERE candidate_id = ? AND exam_id = ?',
+      'SELECT * FROM exam_attempts WHERE candidate_id = ? AND exam_id = ?',
       [candidateId, examId]
     );
 
     if (existing.length > 0) {
-      return res.status(400).json({ error: 'Candidate has already attempted this exam' });
+      const attempt = existing[0];
+      if (attempt.is_submitted) {
+        return res.status(400).json({ error: 'Candidate has already submitted this exam' });
+      }
+
+      // If not submitted, allow resuming without losing access
+      attempt.answers = safeJsonParse(attempt.answers, []);
+      return res.json({
+        success: true,
+        resumed: true,
+        data: {
+          id: attempt.id,
+          candidateId: attempt.candidate_id,
+          examId: attempt.exam_id,
+          answers: attempt.answers,
+          tabSwitches: attempt.tab_switches,
+          isSubmitted: false,
+          startedAt: attempt.started_at
+        },
+        message: 'Exam attempt resumed'
+      });
     }
 
     const id = generateUUID();
@@ -153,9 +173,10 @@ router.put('/:id', async (req, res) => {
 });
 
 // ============================================================
-// SUBMIT EXAM ATTEMPT
+// SUBMIT EXAM ATTEMPT (Transactional & Idempotent for high concurrency)
 // ============================================================
 router.post('/:id/submit', async (req, res) => {
+  let connection;
   try {
     const { id } = req.params;
     const { answers, tabSwitches } = req.body;
@@ -163,6 +184,47 @@ router.post('/:id/submit', async (req, res) => {
     if (!Array.isArray(answers)) {
       return res.status(400).json({ error: 'Answers must be an array' });
     }
+
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    // Check if already submitted and result exists (idempotency guard)
+    const [existingResults] = await connection.execute(
+      'SELECT * FROM exam_results WHERE attempt_id = ?',
+      [id]
+    );
+
+    if (existingResults.length > 0) {
+      await connection.commit();
+      const r = existingResults[0];
+      return res.json({
+        success: true,
+        data: {
+          attemptId: id,
+          totalQuestions: r.total_questions,
+          correctAnswers: r.correct_answers,
+          wrongAnswers: r.wrong_answers,
+          unanswered: r.unanswered,
+          totalMarks: Number(r.total_marks),
+          obtainedMarks: Number(r.obtained_marks),
+          percentage: Number(r.percentage)
+        },
+        message: 'Exam already submitted'
+      });
+    }
+
+    // Lock attempt row for atomic submission
+    const [attempts] = await connection.execute(
+      'SELECT * FROM exam_attempts WHERE id = ? FOR UPDATE',
+      [id]
+    );
+
+    if (attempts.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'Attempt not found' });
+    }
+
+    const attempt = attempts[0];
 
     // Update attempt status
     const updateParts = ['is_submitted = 1', 'submitted_at = NOW()', 'answers = ?'];
@@ -176,36 +238,24 @@ router.post('/:id/submit', async (req, res) => {
     values.push(id);
 
     const query = `UPDATE exam_attempts SET ${updateParts.join(', ')} WHERE id = ?`;
-    await pool.execute(query, values);
+    await connection.execute(query, values);
 
-    // Get attempt details
-    const [attempts] = await pool.execute(
-      'SELECT * FROM exam_attempts WHERE id = ?',
-      [id]
-    );
-
-    if (attempts.length === 0) {
-      return res.status(404).json({ error: 'Attempt not found' });
-    }
-
-    const attempt = attempts[0];
-
-    // Calculate result
-    const [exams] = await pool.execute(
+    // Get exam settings
+    const [exams] = await connection.execute(
       'SELECT marks_per_question, negative_marks FROM exams WHERE id = ?',
       [attempt.exam_id]
     );
 
-    const examSettings = exams[0];
-    const defaultMarks = Number(examSettings?.marks_per_question ?? 1) || 1;
-    const defaultNegativeMarks = Number(examSettings?.negative_marks ?? 0) || 0;
+    const examSettings = exams[0] || {};
+    const defaultMarks = Number(examSettings.marks_per_question ?? 1) || 1;
+    const defaultNegativeMarks = Number(examSettings.negative_marks ?? 0) || 0;
 
     const canUseQuestionNegativeMarks = await supportsQuestionNegativeMarks();
     const questionQuery = canUseQuestionNegativeMarks
       ? 'SELECT id, correct_answer, marks, negative_marks FROM questions WHERE exam_id = ?'
       : 'SELECT id, correct_answer, marks FROM questions WHERE exam_id = ?';
 
-    const [questions] = await pool.execute(
+    const [questions] = await connection.execute(
       questionQuery,
       [attempt.exam_id]
     );
@@ -223,9 +273,9 @@ router.post('/:id/submit', async (req, res) => {
       totalMarks += questionMarks;
 
       const answer = answers.find(a => a.questionId === question.id);
-      if (!answer || answer.selectedAnswer === null) {
+      if (!answer || answer.selectedAnswer === null || answer.selectedAnswer === undefined) {
         unanswered++;
-      } else if (answer.selectedAnswer === question.correct_answer) {
+      } else if (Number(answer.selectedAnswer) === Number(question.correct_answer)) {
         correct++;
         obtainedMarks += questionMarks;
       } else {
@@ -237,20 +287,30 @@ router.post('/:id/submit', async (req, res) => {
     obtainedMarks = Math.max(0, obtainedMarks);
     const percentage = totalMarks > 0 ? Math.round((obtainedMarks / totalMarks) * 100) : 0;
 
-    // Save result
+    // Save result atomically
     const resultId = generateUUID();
-    await pool.execute(
+    await connection.execute(
       `INSERT INTO exam_results (
         id, attempt_id, candidate_id, exam_id, total_questions,
         correct_answers, wrong_answers, unanswered, total_marks,
         obtained_marks, percentage
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        total_questions = VALUES(total_questions),
+        correct_answers = VALUES(correct_answers),
+        wrong_answers = VALUES(wrong_answers),
+        unanswered = VALUES(unanswered),
+        total_marks = VALUES(total_marks),
+        obtained_marks = VALUES(obtained_marks),
+        percentage = VALUES(percentage)`,
       [
         resultId, id, attempt.candidate_id, attempt.exam_id,
         questions.length, correct, wrong, unanswered,
         totalMarks, obtainedMarks, percentage
       ]
     );
+
+    await connection.commit();
 
     res.json({
       success: true,
@@ -267,8 +327,15 @@ router.post('/:id/submit', async (req, res) => {
       message: 'Exam submitted and result calculated'
     });
   } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {}
+    }
     console.error('Submit attempt error:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    if (connection) connection.release();
   }
 });
 
