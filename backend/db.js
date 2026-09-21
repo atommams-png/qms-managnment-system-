@@ -9,20 +9,21 @@ dotenv.config();
 
 // Create connection pool
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'atom_qms',
-  waitForConnections: true,
-  connectionLimit: parseInt(process.env.DB_POOL_LIMIT || '35', 10),
-  queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 0,
-  connectTimeout: 10000,
-  // Keep DATETIME values in local wall-clock time to avoid UI schedule shifts.
-  timezone: 'local'
-});
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT || '3306', 10),
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
 
+    waitForConnections: true,
+    connectionLimit: parseInt(process.env.DB_POOL_LIMIT || '40', 10),
+    queueLimit: parseInt(process.env.DB_QUEUE_LIMIT || '2000', 10),
+
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 0,
+    connectTimeout: 10000,
+    timezone: 'local'
+});
 // Test connection
 export async function testConnection() {
   try {
