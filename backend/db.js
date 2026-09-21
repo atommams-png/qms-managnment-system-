@@ -35,22 +35,38 @@ const pool = mysql.createPool({
   timezone: 'local'
 });
 // Test connection
+// Test connection
 export async function testConnection() {
+  let connection;
+
   try {
-    const connection = await pool.getConnection();
-    const [rows] = await connection.execute('SELECT 1');
-    connection.release();
+    connection = await pool.getConnection();
+
+    const [rows] = await connection.query(`
+      SELECT
+        DATABASE() AS database_name,
+        @@hostname AS mysql_host,
+        USER() AS mysql_user
+    `);
+
+    console.log('✓ Database connection pool established');
+    console.log('✓ Connected database:', rows[0].database_name);
+    console.log('✓ MySQL host:', rows[0].mysql_host);
+    console.log('✓ MySQL user:', rows[0].mysql_user);
+
     return true;
   } catch (error) {
     if (error.code === 'ER_ACCESS_DENIED_ERROR') {
       console.error('Database connection error: Access denied.');
-      console.error('Check backend/.env DB_USER and DB_PASSWORD values.');
-      console.error('Tip: run "npm run init:db" from backend after setting valid credentials.');
+      console.error('Check MySQL credentials.');
     } else {
       console.error('Database connection error:', error.message);
     }
+
     throw error;
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 }
-
-export default pool;
