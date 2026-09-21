@@ -20,7 +20,7 @@ RUN npm install -g pm2
 # Install backend production dependencies
 WORKDIR /app/backend
 COPY backend/package*.json ./
-RUN npm ci --only=production
+RUN npm install --omit=dev
 
 # Copy backend source & built frontend
 COPY backend/ ./
