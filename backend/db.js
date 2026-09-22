@@ -10,10 +10,24 @@ dotenv.config();
 // Create connection pool
 const pool = mysql.createPool({
   host: process.env.MYSQLHOST || process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.MYSQLPORT || process.env.DB_PORT || '3306', 10),
+
+  port: parseInt(
+    process.env.MYSQLPORT || process.env.DB_PORT || '3306',
+    10
+  ),
+
   user: process.env.MYSQLUSER || process.env.DB_USER || 'root',
-  password: process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || '',
-  database: process.env.MYSQLDATABASE || process.env.DB_NAME || 'railway',
+
+  password:
+    process.env.MYSQLPASSWORD ||
+    process.env.DB_PASSWORD ||
+    '',
+
+  database:
+    process.env.MYSQLDATABASE ||
+    process.env.MYSQL_DATABASE ||
+    process.env.DB_NAME ||
+    'railway',
 
   waitForConnections: true,
 
