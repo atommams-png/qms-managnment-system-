@@ -35,7 +35,6 @@ const pool = mysql.createPool({
   timezone: 'local'
 });
 // Test connection
-// Test connection
 export async function testConnection() {
   let connection;
 
@@ -56,13 +55,7 @@ export async function testConnection() {
 
     return true;
   } catch (error) {
-    if (error.code === 'ER_ACCESS_DENIED_ERROR') {
-      console.error('Database connection error: Access denied.');
-      console.error('Check MySQL credentials.');
-    } else {
-      console.error('Database connection error:', error.message);
-    }
-
+    console.error('Database connection error:', error.message);
     throw error;
   } finally {
     if (connection) {
@@ -70,3 +63,5 @@ export async function testConnection() {
     }
   }
 }
+
+export default pool;
