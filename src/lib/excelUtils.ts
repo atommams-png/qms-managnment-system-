@@ -112,13 +112,15 @@ function getSectionScoresFromAttempt(attempt: ExamAttempt, exam: Exam): string {
   const sections = new Map<string, { total: number; obtained: number }>();
 
   exam.questions.forEach(q => {
-    const section = q.section || 'Unsorted';
+    const section = (q.section && String(q.section).trim()) || '';
+    if (!section) return; // Only process sections that were explicitly mentioned
+
     const entry = sections.get(section) ?? { total: 0, obtained: 0 };
     const marks = q.marks || 1;
     entry.total += marks;
 
     const ans = attempt.answers.find(a => a.questionId === q.id);
-    if (ans && ans.selectedAnswer !== null) {
+    if (ans && ans.selectedAnswer !== null && ans.selectedAnswer !== undefined) {
       if (ans.selectedAnswer === q.correctAnswer) {
         entry.obtained += marks;
       } else {
@@ -128,6 +130,8 @@ function getSectionScoresFromAttempt(attempt: ExamAttempt, exam: Exam): string {
 
     sections.set(section, entry);
   });
+
+  if (sections.size === 0) return 'N/A';
 
   return Array.from(sections.entries())
     .map(([section, { total, obtained }]) => {
