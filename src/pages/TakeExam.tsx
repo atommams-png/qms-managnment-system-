@@ -5,7 +5,7 @@ import { Exam, ExamAttempt, CandidateAnswer, Question } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, ChevronLeft, ChevronRight, Clock, Send, CheckCircle2, RefreshCw, RotateCcw } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Clock, Send, CheckCircle2, RefreshCw, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '@/components/Header';
 
@@ -28,6 +28,9 @@ const TakeExam = () => {
   const [scheduleMessage, setScheduleMessage] = useState('');
   const [alertTimeoutId, setAlertTimeoutId] = useState<NodeJS.Timeout | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+  const [isNavOpen, setIsNavOpen] = useState(true);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(true);
+  const questionBtnRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const attemptRef = useRef<ExamAttempt | null>(null);
   const tabSwitchesRef = useRef<number>(0);
@@ -37,6 +40,15 @@ const TakeExam = () => {
 
   // Local storage backup key for crash/reload resilience
   const storageKey = candidateId && examId ? `exam_progress_${examId}_${candidateId}` : '';
+
+  // Auto-scroll the active question button into view inside the sliding navigator
+  useEffect(() => {
+    questionBtnRefs.current[currentQ]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'nearest'
+    });
+  }, [currentQ]);
 
   // Initialize exam
   useEffect(() => {
@@ -623,30 +635,51 @@ const TakeExam = () => {
       {exam.settings.navigationPanel && (
         <div className="lg:hidden w-full px-2 sm:px-4">
           <div className="mx-auto w-full max-w-6xl">
-            <div className="mt-2 mb-3 pb-4 border-b border-border">
-              <p className="mb-3 text-xs font-semibold text-muted-foreground uppercase">Question Navigator</p>
-              <div className="grid grid-cols-6 gap-2">
-                {questions.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => navigateToQuestion(i)}
-                    className={`flex h-9 w-9 items-center justify-center rounded-md text-xs font-semibold transition-all ${
-                      i === currentQ
-                        ? 'bg-primary text-primary-foreground ring-2 ring-primary/50'
-                        : answers[i]?.selectedAnswer !== null
-                        ? 'bg-success/20 text-success border-2 border-success/40 hover:bg-success/30'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-border'
-                    }`}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
+            <div className="mt-2 mb-3 pb-3 border-b border-border">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Question Navigator</p>
+                  <span className="text-[11px] font-semibold bg-muted px-2 py-0.5 rounded-full text-muted-foreground">
+                    {answers.filter(a => a && a.selectedAnswer !== null && a.selectedAnswer !== undefined).length}/{questions.length}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileNavOpen(!isMobileNavOpen)}
+                  className="text-xs text-primary font-medium flex items-center gap-1 cursor-pointer"
+                >
+                  {isMobileNavOpen ? 'Hide' : 'Show'}
+                  {isMobileNavOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                </button>
               </div>
-              <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-primary" /> Current</div>
-                <div className="flex items-center gap-2"><div className="h-3 w-3 rounded border border-success/40 bg-success/20" /> Answered</div>
-                <div className="flex items-center gap-2"><div className="h-3 w-3 rounded border border-border bg-muted" /> Unanswered</div>
-              </div>
+              {isMobileNavOpen && (
+                <>
+                  <div className="max-h-[140px] overflow-y-auto pr-1 scroll-smooth">
+                    <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5">
+                      {questions.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => navigateToQuestion(i)}
+                          className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                            i === currentQ
+                              ? 'bg-primary text-primary-foreground ring-2 ring-primary/50'
+                              : answers[i]?.selectedAnswer !== null && answers[i]?.selectedAnswer !== undefined
+                              ? 'bg-success/20 text-success border border-success/40'
+                              : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-border'
+                          }`}
+                        >
+                          {i + 1}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-2.5 flex items-center gap-3 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5"><div className="h-2.5 w-2.5 rounded bg-primary" /> Current</div>
+                    <div className="flex items-center gap-1.5"><div className="h-2.5 w-2.5 rounded border border-success/40 bg-success/20" /> Answered</div>
+                    <div className="flex items-center gap-1.5"><div className="h-2.5 w-2.5 rounded border border-border bg-muted" /> Unanswered</div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -697,12 +730,13 @@ const TakeExam = () => {
               {currentAnswer !== null && currentAnswer !== undefined && (
                 <div className="mt-4 flex justify-end">
                   <Button
-                    variant="ghost"
+                    type="button"
                     size="sm"
                     onClick={clearAnswer}
-                    className="text-xs text-muted-foreground hover:text-destructive gap-1.5 h-8 px-2.5"
+                    className="text-xs !bg-[#008037] hover:!bg-rose-600 active:!bg-rose-700 !text-white font-semibold gap-1.5 h-8 px-3 rounded-lg shadow-sm transition-colors cursor-pointer"
                   >
-                    <RotateCcw className="h-3 w-3" /> Clear selection
+                    <RotateCcw className="h-3.5 w-3.5 text-white" />
+                    <span className="text-white font-medium">Clear selection</span>
                   </Button>
                 </div>
               )}
@@ -725,36 +759,77 @@ const TakeExam = () => {
           </div>
         </div>
 
-        {/* Navigation Panel - Desktop Only */}
+        {/* Navigation Panel - Desktop Only (Sliding, Compact & Scrollable) */}
         {exam.settings.navigationPanel && (
-          <div className="hidden w-64 shrink-0 lg:block pt-2">
-            <Card className="sticky top-20">
-              <CardContent className="pt-6">
-                <p className="mb-3 text-sm font-semibold">Question Navigator</p>
-                <div className="grid grid-cols-5 gap-2">
-                  {questions.map((_, i) => (
+          <div className={`hidden lg:block shrink-0 transition-all duration-200 ${isNavOpen ? 'w-64' : 'w-10'} pt-2`}>
+            {isNavOpen ? (
+              <Card className="sticky top-20 shadow-sm border-border/80 overflow-hidden">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-border/60">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-bold uppercase tracking-wider text-foreground">Question Navigator</p>
+                      <span className="text-[11px] font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                        {answers.filter(a => a && a.selectedAnswer !== null && a.selectedAnswer !== undefined).length}/{questions.length}
+                      </span>
+                    </div>
                     <button
-                      key={i}
-                      onClick={() => navigateToQuestion(i)}
-                      className={`flex h-9 w-9 items-center justify-center rounded-md text-sm font-medium transition-all ${
-                        i === currentQ
-                          ? 'bg-primary text-primary-foreground'
-                          : answers[i]?.selectedAnswer !== null
-                          ? 'bg-success/15 text-success border border-success/30'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
+                      type="button"
+                      onClick={() => setIsNavOpen(false)}
+                      className="h-6 w-6 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                      title="Collapse Navigator"
                     >
-                      {i + 1}
+                      <ChevronRight className="h-4 w-4" />
                     </button>
-                  ))}
-                </div>
-                <div className="mt-4 space-y-1.5 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-success/15 border border-success/30" /> Answered</div>
-                  <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-muted" /> Unanswered</div>
-                  <div className="flex items-center gap-2"><div className="h-3 w-3 rounded bg-primary" /> Current</div>
-                </div>
-              </CardContent>
-            </Card>
+                  </div>
+
+                  {/* Scrollable / Sliding Question Grid (Compact height with smooth scroll) */}
+                  <div className="max-h-[260px] overflow-y-auto pr-1 scroll-smooth">
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {questions.map((_, i) => (
+                        <button
+                          key={i}
+                          ref={el => { questionBtnRefs.current[i] = el; }}
+                          onClick={() => navigateToQuestion(i)}
+                          className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                            i === currentQ
+                              ? 'bg-primary text-primary-foreground ring-2 ring-primary/40 shadow-xs'
+                              : answers[i]?.selectedAnswer !== null && answers[i]?.selectedAnswer !== undefined
+                              ? 'bg-success/20 text-success border border-success/40 hover:bg-success/30 font-bold'
+                              : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-border/60'
+                          }`}
+                        >
+                          {i + 1}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Compact Legend */}
+                  <div className="pt-2 border-t border-border/60 space-y-1 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2"><div className="h-2.5 w-2.5 rounded-sm bg-primary" /> Current Question</div>
+                    <div className="flex items-center gap-2"><div className="h-2.5 w-2.5 rounded-sm bg-success/20 border border-success/40" /> Answered</div>
+                    <div className="flex items-center gap-2"><div className="h-2.5 w-2.5 rounded-sm bg-muted border border-border" /> Unanswered</div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="sticky top-20">
+                <button
+                  type="button"
+                  onClick={() => setIsNavOpen(true)}
+                  className="py-3 px-2 flex flex-col items-center gap-1.5 bg-card hover:bg-muted text-foreground border border-border shadow-xs rounded-lg cursor-pointer transition-colors"
+                  title="Expand Question Navigator"
+                >
+                  <ChevronLeft className="h-4 w-4 text-primary" />
+                  <span className="text-[10px] font-bold uppercase [writing-mode:vertical-lr] rotate-180 text-muted-foreground tracking-wider py-1">
+                    Navigator
+                  </span>
+                  <span className="text-[10px] font-bold text-primary">
+                    {currentQ + 1}/{questions.length}
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
