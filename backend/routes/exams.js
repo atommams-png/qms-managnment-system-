@@ -86,7 +86,8 @@ const toMySqlDateTime = (value) => {
 // IN-MEMORY EXAM CACHE (Reduces DB query load during exam start)
 // ============================================================
 const examCache = new Map();
-const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 export const clearExamCache = (examIdOrCode) => {
   if (!examIdOrCode) {
