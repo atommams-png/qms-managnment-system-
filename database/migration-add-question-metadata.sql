@@ -2,7 +2,7 @@
 -- Run this on existing databases to add support for reading comprehension questions
 -- and additional question metadata.
 
-USE code_exam_guard;
+USE railway;
 
 -- 1. Add new columns to questions table
 ALTER TABLE questions 

@@ -175,7 +175,7 @@ async function startServer() {
 ║     Port:        http://localhost:${PORT}                  ║
 ║     Worker PID:  ${process.pid}                                    ║
 ║     Environment: ${process.env.NODE_ENV || 'production'}                   ║
-║     Database:    ${process.env.DB_NAME || 'code_exam_guard'}                   ║
+║     Database:    ${process.env.DB_NAME || 'railway'}                   ║
 ║     Gzip:        Enabled                                   ║
 ║     SPA Mode:    ${fs.existsSync(distPath) ? 'Serving dist/ build' : 'API only'}                ║
 ║                                                            ║
