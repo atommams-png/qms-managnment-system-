@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, LogOut, FileText, Users, Trophy, Copy, Trash2, Eye, EyeOff, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '@/components/Header';
+import { parseExamScheduleDate } from '@/lib/dateUtils';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -39,13 +40,13 @@ const AdminDashboard = () => {
     if (!exam.isActive) return 'inactive';
 
     if (exam.startDateTime) {
-      const start = new Date(exam.startDateTime);
-      if (now < start) return 'notStarted';
+      const start = parseExamScheduleDate(exam.startDateTime);
+      if (start && now < start) return 'notStarted';
     }
 
     if (exam.endDateTime) {
-      const end = new Date(exam.endDateTime);
-      if (now > end) return 'expired';
+      const end = parseExamScheduleDate(exam.endDateTime);
+      if (end && now > end) return 'expired';
     }
 
     return 'active';

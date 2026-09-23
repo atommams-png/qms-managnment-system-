@@ -106,7 +106,7 @@ const CreateExam = () => {
       return;
     }
 
-    if (new Date(startDateTime) >= new Date(endDateTime)) {
+    if (startDateTimeObj.getTime() >= endDateTimeObj.getTime()) {
       toast.error('Start date/time must be before end date/time');
       return;
     }

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { ArrowLeft } from 'lucide-react';
 import Header from '@/components/Header';
 import { toast } from 'sonner';
+import { getExamScheduleDateParts } from '@/lib/dateUtils';
 
 const EditExam = () => {
   const { id } = useParams<{ id: string }>();
@@ -60,34 +61,20 @@ const EditExam = () => {
         setSettings(exam.settings);
 
         if (exam.startDateTime) {
-  const value = String(exam.startDateTime);
+          const parts = getExamScheduleDateParts(exam.startDateTime);
+          if (parts) {
+            setStartDate(parts.date);
+            setStartTime(parts.time);
+          }
+        }
 
-  // Handle MySQL DATETIME:
-  // 2026-09-23 16:00:00
-  // Also handle ISO/local format:
-  // 2026-09-23T16:00:00
-  const match = value.match(
-    /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/
-  );
-
-  if (match) {
-    setStartDate(match[1]);
-    setStartTime(match[2]);
-  }
-}
-
-if (exam.endDateTime) {
-  const value = String(exam.endDateTime);
-
-  const match = value.match(
-    /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/
-  );
-
-  if (match) {
-    setEndDate(match[1]);
-    setEndTime(match[2]);
-  }
-}
+        if (exam.endDateTime) {
+          const parts = getExamScheduleDateParts(exam.endDateTime);
+          if (parts) {
+            setEndDate(parts.date);
+            setEndTime(parts.time);
+          }
+        }
 
         setIsLoading(false);
 
@@ -174,7 +161,7 @@ const endDateTimeObj = new Date(`${endDate}T${endTime}:00`);
       return;
     }
 
-    if (new Date(startDateTime) >= new Date(endDateTime)) {
+    if (startDateTimeObj.getTime() >= endDateTimeObj.getTime()) {
       toast.error('Start date/time must be before end date/time');
       return;
     }

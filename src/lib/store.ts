@@ -1,5 +1,6 @@
 import { Admin, Exam, Candidate, ExamAttempt, ExamResult, Question, CandidateAnswer } from './types';
 import * as api from './api';
+import { parseExamScheduleDate } from './dateUtils';
 
 // ============================================================
 // SESSION MANAGEMENT (using SessionStorage for temporary state only)
@@ -57,14 +58,14 @@ export async function getVisibleExams(options: { includeNotStarted?: boolean; in
 
     // Expiration handling
     if (exam.endDateTime) {
-      const end = new Date(exam.endDateTime);
-      if (end < now && !options.includeExpired) return false;
+      const end = parseExamScheduleDate(exam.endDateTime);
+      if (end && end < now && !options.includeExpired) return false;
     }
 
     // Not started handling
     if (!options.includeNotStarted && exam.startDateTime) {
-      const start = new Date(exam.startDateTime);
-      if (start > now) return false;
+      const start = parseExamScheduleDate(exam.startDateTime);
+      if (start && start > now) return false;
     }
 
     return true;
@@ -79,12 +80,12 @@ export async function getExamAccessStatus(code: string): Promise<{ status: 'acti
 
     const now = new Date();
     if (exam.startDateTime) {
-      const start = new Date(exam.startDateTime);
-      if (now < start) return { status: 'not_started', exam };
+      const start = parseExamScheduleDate(exam.startDateTime);
+      if (start && now < start) return { status: 'not_started', exam };
     }
     if (exam.endDateTime) {
-      const end = new Date(exam.endDateTime);
-      if (now > end) return { status: 'expired', exam };
+      const end = parseExamScheduleDate(exam.endDateTime);
+      if (end && now > end) return { status: 'expired', exam };
     }
 
     return { status: 'active', exam };

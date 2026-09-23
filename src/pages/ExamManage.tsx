@@ -12,6 +12,7 @@ import { ArrowLeft, Plus, Trash2, Download, Copy, Edit, Settings, Upload, FileTe
 import { toast } from 'sonner';
 import { ImageUploadInput } from '@/components/ImageUploadInput';
 import { exportExamResultsToExcel, previewQuestionsFromExcel, downloadQuestionsTemplate } from '@/lib/excelUtils';
+import { formatExamScheduleDateTime } from '@/lib/dateUtils';
 import Header from '@/components/Header';
 
 const ExamManage = () => {
@@ -567,11 +568,11 @@ const ExamManage = () => {
           <CardContent className="grid gap-6 sm:grid-cols-2 pt-6">
             <div className="rounded-lg bg-green-50 p-4 border border-green-200">
               <p className="text-xs font-semibold text-green-700 uppercase">Start</p>
-              <p className="font-semibold text-green-900 mt-1">{formatDateTimeDDMMYYYY(exam.startDateTime)}</p>
+              <p className="font-semibold text-green-900 mt-1">{formatExamScheduleDateTime(exam.startDateTime)}</p>
             </div>
             <div className="rounded-lg bg-green-50 p-4 border border-green-200">
               <p className="text-xs font-semibold text-green-700 uppercase">End</p>
-              <p className="font-semibold text-green-900 mt-1">{formatDateTimeDDMMYYYY(exam.endDateTime)}</p>
+              <p className="font-semibold text-green-900 mt-1">{formatExamScheduleDateTime(exam.endDateTime)}</p>
             </div>
           </CardContent>
         </Card>

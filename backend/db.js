@@ -67,7 +67,10 @@ const pool = mysql.createPool({
   connectTimeout: 10000,
 
   // Store/use database timestamps in UTC
-  timezone: 'Z'
+  timezone: 'Z',
+
+  // Return DATETIME and TIMESTAMP values as strings to prevent timezone shifting
+  dateStrings: true
 });
 
 // ============================================================
