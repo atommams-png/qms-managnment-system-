@@ -743,16 +743,30 @@ const TakeExam = () => {
             </CardContent>
           </Card>
 
-          <div className="flex w-full flex-col sm:flex-row items-center sm:justify-between gap-3">
-            <Button variant="outline" onClick={() => navigateToQuestion(currentQ - 1)} disabled={currentQ === 0}>
+          <div className="flex w-full flex-row items-center justify-between gap-3 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigateToQuestion(currentQ - 1)}
+              disabled={currentQ === 0}
+              className="flex-1 sm:flex-initial sm:min-w-[130px] h-11 sm:h-10 text-sm font-semibold rounded-lg shadow-sm"
+            >
               <ChevronLeft className="mr-1 h-4 w-4" /> Previous
             </Button>
             {currentQ === questions.length - 1 ? (
-              <Button onClick={() => handleSubmit()} className="bg-success hover:bg-success/90 text-success-foreground">
+              <Button
+                type="button"
+                onClick={() => handleSubmit()}
+                className="flex-1 sm:flex-initial sm:min-w-[140px] h-11 sm:h-10 text-sm font-semibold bg-success hover:bg-success/90 text-success-foreground rounded-lg shadow-sm"
+              >
                 <Send className="mr-1.5 h-4 w-4" /> Submit Exam
               </Button>
             ) : (
-              <Button onClick={() => navigateToQuestion(currentQ + 1)}>
+              <Button
+                type="button"
+                onClick={() => navigateToQuestion(currentQ + 1)}
+                className="flex-1 sm:flex-initial sm:min-w-[130px] h-11 sm:h-10 text-sm font-semibold rounded-lg shadow-sm"
+              >
                 Next <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             )}
