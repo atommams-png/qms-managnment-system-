@@ -55,16 +55,40 @@ const parseOptions = (rawOptions) => {
 const toMySqlDateTime = (value) => {
   if (!value) return null;
 
-  // Already in MySQL DATETIME format
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(value)) {
+  // HTML datetime-local:
+  // 2026-09-23T16:00
+  // Preserve exactly what the user selected.
+  if (
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)
+  ) {
+    return value.replace('T', ' ') + ':00';
+  }
+
+  // Already MySQL DATETIME:
+  // 2026-09-23 16:00
+  // 2026-09-23 16:00:00
+  if (
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(value)
+  ) {
     return value.length === 16 ? `${value}:00` : value;
   }
 
+  // Only use Date parsing for values that are genuinely ISO/Date objects.
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
 
   const pad = (n) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(
+    date.getSeconds()
+  )}`;
 };
 
 // ============================================================
