@@ -139,18 +139,16 @@ if (exam.endDateTime) {
     const startDateTime = `${startDate} ${startTime}:00`;
     const endDateTime = `${endDate} ${endTime}:00`;
 
-    const now = new Date();
-    const startDateParts = startDate.split('-');
-    const endDateParts = endDate.split('-');
+   const now = new Date();
 
-    const startDay = new Date(parseInt(startDateParts[0]), parseInt(startDateParts[1]) - 1, parseInt(startDateParts[2]));
-    const endDay = new Date(parseInt(endDateParts[0]), parseInt(endDateParts[1]) - 1, parseInt(endDateParts[2]));
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
+const todayDate = new Date();
+todayDate.setHours(0, 0, 0, 0);
 
-    const startDateTimeObj = new Date(`${startDate}T${startTime}`);
-    const endDateTimeObj = new Date(`${endDate}T${endTime}`);
+const startDay = new Date(`${startDate}T00:00:00`);
+const endDay = new Date(`${endDate}T00:00:00`);
 
+const startDateTimeObj = new Date(`${startDate}T${startTime}:00`);
+const endDateTimeObj = new Date(`${endDate}T${endTime}:00`);
     if (startDay.getTime() < todayDate.getTime()) {
       toast.error('Start date cannot be in the past');
       return;
