@@ -5,10 +5,10 @@ import { Exam } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, LogOut, FileText, Users, Trophy, Copy, Trash2, Eye, EyeOff, BarChart3 } from 'lucide-react';
+import { Plus, LogOut, FileText, Users, Trophy, Copy, Trash2, Eye, EyeOff, BarChart3, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '@/components/Header';
-import { parseExamScheduleDate } from '@/lib/dateUtils';
+import { parseExamScheduleDate, formatExamScheduleDateTime } from '@/lib/dateUtils';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -340,6 +340,16 @@ const AdminDashboard = () => {
                     <div className="text-sm text-muted-foreground space-y-1">
                       <p>{exam.questionCount ?? exam.questions?.length ?? 0} questions · {exam.settings?.duration ?? 'N/A'} min</p>
                       <p>{exam.settings?.marksPerQuestion ?? 'N/A'} marks/q · {exam.settings?.negativeMarks ?? 'N/A'} negative</p>
+                    </div>
+                    <div className="text-xs text-muted-foreground space-y-1 rounded-lg bg-muted/40 p-2.5 border border-border/50">
+                      <div className="flex items-center gap-1.5 font-medium text-foreground">
+                        <Calendar className="h-3.5 w-3.5 text-primary" />
+                        <span>Schedule Window</span>
+                      </div>
+                      <div className="space-y-0.5 text-xs text-muted-foreground">
+                        <p><span className="font-semibold text-foreground/80">Start:</span> {formatExamScheduleDateTime(exam.startDateTime)}</p>
+                        <p><span className="font-semibold text-foreground/80">End:</span> {formatExamScheduleDateTime(exam.endDateTime)}</p>
+                      </div>
                     </div>
                     <div className="flex gap-2 pt-2">
                       <Button variant="outline" size="sm" className="flex-1" onClick={() => navigate(`/admin/exam/${exam.id}`)}>
