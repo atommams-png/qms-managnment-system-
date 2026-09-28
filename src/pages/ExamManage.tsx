@@ -8,12 +8,15 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, Trash2, Download, Copy, Edit, Settings, Upload, FileText, Eye, CheckCircle2, HelpCircle, Sparkles } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Download, Copy, Edit, Settings, Upload, FileText, Eye, CheckCircle2, XCircle, MinusCircle, HelpCircle, Sparkles, LayoutGrid, Table as TableIcon, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, BarChart3, FileQuestion } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { ImageUploadInput } from '@/components/ImageUploadInput';
 import { exportExamResultsToExcel, previewQuestionsFromExcel, downloadQuestionsTemplate } from '@/lib/excelUtils';
+import { exportExamDetailedPdfReport } from '@/lib/pdfUtils';
 import { formatExamScheduleDateTime } from '@/lib/dateUtils';
 import Header from '@/components/Header';
+import { ExamResults3DAnalytics } from '@/components/ExamResults3DAnalytics';
 
 const ExamManage = () => {
   const { id } = useParams<{ id: string }>();
@@ -43,7 +46,7 @@ const ExamManage = () => {
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [previewQuestions, setPreviewQuestions] = useState<any[]>([]);
   const [previewInvalidRows, setPreviewInvalidRows] = useState<{ rowNumber: number; reason: string }[]>([]);
-  
+
   // Filter states
   const [filterAttempted, setFilterAttempted] = useState<'all' | 'attempted' | 'notAttempted'>('all');
   const [filterPercentageMin, setFilterPercentageMin] = useState<number>(0);
@@ -53,15 +56,19 @@ const ExamManage = () => {
   const [filterSection, setFilterSection] = useState<string>('');
   const [filterSearch, setFilterSearch] = useState<string>('');
   const [showFilters, setShowFilters] = useState<boolean>(false);
-  
+  const [resultsViewMode, setResultsViewMode] = useState<'table' | 'card' | 'graph'>('table');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(24);
+  const [selectedCandidateForQAnalysis, setSelectedCandidateForQAnalysis] = useState<{ candidate: Candidate; attempt?: ExamAttempt; result?: ExamResult } | null>(null);
+
   // Export dialog states
   const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
   const [exportAllData, setExportAllData] = useState<boolean>(false);
   const [exportColumns, setExportColumns] = useState<Set<string>>(new Set([
-    'name', 'email', 'college', 'usn', 'department', 'section', 'attempted', 
-    'tabSwitches', 'sectionWise', 'correct', 'wrong', 'score', 'percentage'
+    'name', 'email', 'college', 'usn', 'department', 'section', 'attempted',
+    'tabSwitches', 'sectionWise', 'questionWise', 'correct', 'wrong', 'score', 'percentage'
   ]));
-  
+
   const questionFileRef = useRef<HTMLInputElement>(null);
   const imageUploadSectionRef = useRef<HTMLDivElement>(null);
   const formSectionRef = useRef<HTMLDivElement>(null);
@@ -181,6 +188,44 @@ const ExamManage = () => {
       .join(' | ');
   };
 
+  const getSectionScoresData = (attempt: ExamAttempt) => {
+    if (!exam) return [];
+
+    const examNegativeMarks = exam.settings?.negativeMarks ?? 0;
+    const sections = new Map<string, { total: number; obtained: number }>();
+
+    exam.questions.forEach(q => {
+      const section = (q.section && String(q.section).trim()) || '';
+      if (!section) return;
+
+      const entry = sections.get(section) ?? { total: 0, obtained: 0 };
+      const marks = q.marks || 1;
+      entry.total += marks;
+
+      const ans = attempt.answers.find(a => a.questionId === q.id);
+      if (ans && ans.selectedAnswer !== null && ans.selectedAnswer !== undefined) {
+        if (ans.selectedAnswer === q.correctAnswer) {
+          entry.obtained += marks;
+        } else {
+          entry.obtained -= q.negativeMarks ?? examNegativeMarks;
+        }
+      }
+
+      sections.set(section, entry);
+    });
+
+    return Array.from(sections.entries()).map(([section, { total, obtained }]) => {
+      const positiveObtained = Math.max(0, obtained);
+      const percent = total > 0 ? Math.round((positiveObtained / total) * 100) : 0;
+      return {
+        section,
+        obtained: positiveObtained,
+        total,
+        percent,
+      };
+    });
+  };
+
   const formatDateTimeDDMMYYYY = (value?: string | null) => {
     if (!value) return 'Not scheduled';
     const date = new Date(value);
@@ -222,34 +267,34 @@ const ExamManage = () => {
     return candidates.filter(candidate => {
       const result = results.find(r => r.candidateId === candidate.id);
       const attempt = result ? getAttemptsList().find(a => a.id === result.attemptId) : undefined;
-      
+
       // Filter by attempt status
       if (filterAttempted === 'attempted' && !attempt) return false;
       if (filterAttempted === 'notAttempted' && attempt) return false;
-      
+
       // Filter by percentage range
       if (result && (result.percentage < filterPercentageMin || result.percentage > filterPercentageMax)) {
         return false;
       }
-      
+
       // Filter by department
       if (filterDepartment && candidate.department !== filterDepartment) return false;
-      
+
       // Filter by college
       if (filterCollege && candidate.college !== filterCollege) return false;
-      
+
       // Filter by section
       if (filterSection && candidate.section !== filterSection) return false;
-      
+
       // Filter by search (name and email)
       if (filterSearch) {
         const searchTerm = filterSearch.toLowerCase();
-        if (!candidate.name.toLowerCase().includes(searchTerm) && 
-            !candidate.email.toLowerCase().includes(searchTerm)) {
+        if (!candidate.name.toLowerCase().includes(searchTerm) &&
+          !candidate.email.toLowerCase().includes(searchTerm)) {
           return false;
         }
       }
-      
+
       return true;
     });
   };
@@ -357,11 +402,11 @@ const ExamManage = () => {
 
     const normalizedOptions = question.type === 'true-false'
       ? (Array.isArray(question.options)
-          ? [...question.options.slice(0, 2), ...Array(Math.max(0, 2 - question.options.length)).fill('')]
-          : ['True', 'False'])
+        ? [...question.options.slice(0, 2), ...Array(Math.max(0, 2 - question.options.length)).fill('')]
+        : ['True', 'False'])
       : (Array.isArray(question.options)
-          ? [...question.options.slice(0, 4), ...Array(Math.max(0, 4 - question.options.length)).fill('')]
-          : ['', '', '', '']);
+        ? [...question.options.slice(0, 4), ...Array(Math.max(0, 4 - question.options.length)).fill('')]
+        : ['', '', '', '']);
     const normalizedOptionImages = Array.isArray(question.optionImages)
       ? [...question.optionImages.slice(0, 4), ...Array(Math.max(0, 4 - question.optionImages.length)).fill('')]
       : ['', '', '', ''];
@@ -421,27 +466,53 @@ const ExamManage = () => {
   const handleExport = async () => {
     if (!id || !exam) return;
     const attempts = getAttemptsList();
-    
+
     // Determine which candidates and results to export
     let candidatesToExport = candidates;
     let resultsToExport = results;
-    
+
     if (!exportAllData) {
       candidatesToExport = getFilteredCandidates();
       resultsToExport = results.filter(r => candidatesToExport.some(c => c.id === r.candidateId));
     }
-    
+
     if (resultsToExport.length === 0 && !exportAllData) {
       toast.error('No results to export with current filters');
       return;
     }
-    
+
     // Convert columns set to array for export function
     const columnsArray = Array.from(exportColumns);
-    
+
     await exportExamResultsToExcel(exam, candidatesToExport, resultsToExport, attempts, columnsArray);
     toast.success('Results exported to Excel with detailed analytics');
     setShowExportDialog(false);
+  };
+
+  const handleExportPdf = async (customFiltered?: boolean) => {
+    if (!id || !exam) return;
+    const attempts = getAttemptsList();
+
+    const isFiltered = customFiltered !== undefined ? customFiltered : (!exportAllData && showFilters);
+    const candidatesToExport = isFiltered ? getFilteredCandidates() : candidates;
+
+    if (candidatesToExport.length === 0) {
+      toast.error('No candidates found to include in the PDF report');
+      return;
+    }
+
+    const toastId = toast.loading('Generating comprehensive exam PDF report...');
+    try {
+      await exportExamDetailedPdfReport(exam, candidates, results, attempts, {
+        filteredCandidates: candidatesToExport,
+        isFiltered,
+      });
+      toast.success('Complete PDF Report downloaded successfully!', { id: toastId });
+      setShowExportDialog(false);
+    } catch (err) {
+      console.error('PDF Export Error:', err);
+      toast.error('Failed to generate PDF report: ' + ((err as Error).message || 'Unknown error'), { id: toastId });
+    }
   };
 
   const toggleExportColumn = (column: string) => {
@@ -584,7 +655,7 @@ const ExamManage = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <TabsList className="bg-emerald-50/90 border-2 border-emerald-200 p-1.5 rounded-xl h-auto flex gap-2 shadow-sm">
-              <TabsTrigger 
+              <TabsTrigger
                 value="questions"
                 className="px-5 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-emerald-950 data-[state=inactive]:hover:bg-emerald-100/80 cursor-pointer"
               >
@@ -593,7 +664,7 @@ const ExamManage = () => {
                   {exam.questions.length}
                 </span>
               </TabsTrigger>
-              <TabsTrigger 
+              <TabsTrigger
                 value="participants"
                 className="px-5 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-emerald-950 data-[state=inactive]:hover:bg-emerald-100/80 cursor-pointer"
               >
@@ -606,16 +677,16 @@ const ExamManage = () => {
 
             {activeTab === 'questions' && (
               <div className="flex items-center gap-2">
-                <Button 
-                  size="sm" 
-                  onClick={() => questionFileRef.current?.click()} 
+                <Button
+                  size="sm"
+                  onClick={() => questionFileRef.current?.click()}
                   disabled={isImporting}
                   className="bg-primary text-white hover:bg-primary/90 shadow-sm"
                 >
                   <Upload className="mr-1.5 h-4 w-4" /> Import Questions
                 </Button>
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={downloadQuestionsTemplate}
                   className="bg-primary text-white hover:bg-primary/90 shadow-sm"
                 >
@@ -625,21 +696,29 @@ const ExamManage = () => {
             )}
 
             {activeTab === 'participants' && (
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => setShowFilters(!showFilters)}
                 >
                   {showFilters ? 'Hide' : 'Show'} Filters
                 </Button>
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={() => setShowExportDialog(true)}
-                  disabled={results.length === 0}
+                  disabled={candidates.length === 0}
                   className="bg-primary text-white hover:bg-primary/90 shadow-sm"
                 >
-                  <Download className="mr-1.5 h-4 w-4" /> Export Excel Report
+                  <Download className="mr-1.5 h-4 w-4" /> Export Excel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleExportPdf(false)}
+                  disabled={candidates.length === 0}
+                  className="bg-[#008037] text-white hover:bg-black shadow-sm font-bold flex items-center gap-1.5"
+                >
+                  <FileText className="h-4 w-4" /> Export PDF Report
                 </Button>
               </div>
             )}
@@ -1003,7 +1082,7 @@ const ExamManage = () => {
                           src={questionImage}
                           alt="Question preview"
                           className="max-h-48 w-auto rounded object-contain"
-                          onError={() => {}}
+                          onError={() => { }}
                         />
                       </div>
                     )}
@@ -1025,20 +1104,18 @@ const ExamManage = () => {
                           return (
                             <div
                               key={i}
-                              className={`p-3 rounded-lg border transition-all ${
-                                isCorrect
+                              className={`p-3 rounded-lg border transition-all ${isCorrect
                                   ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/20 ring-1 ring-emerald-500/40'
                                   : 'border-border bg-card hover:bg-muted/20'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-start justify-between gap-2">
                                 <div className="flex items-start gap-2.5 flex-1">
                                   <div
-                                    className={`h-5 w-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${
-                                      isCorrect
+                                    className={`h-5 w-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${isCorrect
                                         ? 'bg-emerald-600 text-white shadow-sm'
                                         : 'bg-muted text-muted-foreground border'
-                                    }`}
+                                      }`}
                                   >
                                     {optionLabel}
                                   </div>
@@ -1093,446 +1170,768 @@ const ExamManage = () => {
                     </div>
                   </div>
 
-              {exam.questions.length === 0 ? (
-                <Card>
-                  <CardContent className="py-12 text-center text-muted-foreground">No questions available yet. Add your first question above.</CardContent>
-                </Card>
-              ) : (() => {
-              const sections = new Map<string, any[]>();
-              exam.questions.forEach((q, idx) => {
-                const section = q.section || 'Unsorted';
-                if (!sections.has(section)) sections.set(section, []);
-                sections.get(section)!.push({ q, idx });
-              });
+                  {exam.questions.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-12 text-center text-muted-foreground">No questions available yet. Add your first question above.</CardContent>
+                    </Card>
+                  ) : (() => {
+                    const sections = new Map<string, any[]>();
+                    exam.questions.forEach((q, idx) => {
+                      const section = q.section || 'Unsorted';
+                      if (!sections.has(section)) sections.set(section, []);
+                      sections.get(section)!.push({ q, idx });
+                    });
 
-              let globalQNum = 1;
-              return Array.from(sections.entries()).map(([section, questions]) => {
-                // Group questions by passageGroupId within each section
-                const passageGroups = new Map<string, any[]>();
-                const nonRCQuestions: any[] = [];
+                    let globalQNum = 1;
+                    return Array.from(sections.entries()).map(([section, questions]) => {
+                      // Group questions by passageGroupId within each section
+                      const passageGroups = new Map<string, any[]>();
+                      const nonRCQuestions: any[] = [];
 
-                questions.forEach(item => {
-                  if (item.q.type === 'reading-comprehension' && item.q.passageGroupId) {
-                    const groupId = item.q.passageGroupId;
-                    if (!passageGroups.has(groupId)) passageGroups.set(groupId, []);
-                    passageGroups.get(groupId)!.push(item);
-                  } else {
-                    nonRCQuestions.push(item);
-                  }
-                });
-
-                return (
-                  <div key={section} className="space-y-4">
-                    {section !== 'Unsorted' && (
-                      <div className="border-l-4 border-primary pl-4">
-                        <h3 className="text-lg font-semibold text-primary">{section}</h3>
-                      </div>
-                    )}
-
-                    {/* Display passage groups */}
-                    {Array.from(passageGroups.entries()).map(([groupId, groupQuestions]) => {
-                      const passageText = groupQuestions[0]?.q.passage;
-                      const passageQNum = globalQNum;
-                      globalQNum += groupQuestions.length;
+                      questions.forEach(item => {
+                        if (item.q.type === 'reading-comprehension' && item.q.passageGroupId) {
+                          const groupId = item.q.passageGroupId;
+                          if (!passageGroups.has(groupId)) passageGroups.set(groupId, []);
+                          passageGroups.get(groupId)!.push(item);
+                        } else {
+                          nonRCQuestions.push(item);
+                        }
+                      });
 
                       return (
-                        <Card key={groupId} className="border-2 border-accent/30">
-                          <CardContent className="pt-6">
-                            {/* Display passage once */}
-                            {passageText && (
-                              <div className="mb-6 p-4 bg-muted rounded-lg">
-                                <p className="font-semibold mb-2 text-sm">Reading Passage:</p>
-                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{passageText}</p>
-                              </div>
-                            )}
+                        <div key={section} className="space-y-4">
+                          {section !== 'Unsorted' && (
+                            <div className="border-l-4 border-primary pl-4">
+                              <h3 className="text-lg font-semibold text-primary">{section}</h3>
+                            </div>
+                          )}
 
-                            {/* Display all questions for this passage */}
-                            <div className="space-y-4">
-                              {groupQuestions.map((item, passageQIdx) => {
-                                const q = item.q;
-                                const qNum = passageQNum + passageQIdx;
-                                return (
-                                  <div key={q.id} className={passageQIdx > 0 ? 'border-t pt-4' : ''}>
-                                    <div className="flex items-start justify-between">
-                                      <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                          <p className="font-medium">Q{qNum}. {q.text}</p>
-                                          <Badge variant="outline" className="text-xs">Reading Comprehension</Badge>
-                                          <Badge variant="secondary" className="text-xs">{q.marks} mark{q.marks !== 1 ? 's' : ''}</Badge>
-                                          <Badge variant="secondary" className="text-xs">-{q.negativeMarks ?? exam.settings?.negativeMarks ?? 0} neg</Badge>
+                          {/* Display passage groups */}
+                          {Array.from(passageGroups.entries()).map(([groupId, groupQuestions]) => {
+                            const passageText = groupQuestions[0]?.q.passage;
+                            const passageQNum = globalQNum;
+                            globalQNum += groupQuestions.length;
+
+                            return (
+                              <Card key={groupId} className="border-2 border-accent/30">
+                                <CardContent className="pt-6">
+                                  {/* Display passage once */}
+                                  {passageText && (
+                                    <div className="mb-6 p-4 bg-muted rounded-lg">
+                                      <p className="font-semibold mb-2 text-sm">Reading Passage:</p>
+                                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{passageText}</p>
+                                    </div>
+                                  )}
+
+                                  {/* Display all questions for this passage */}
+                                  <div className="space-y-4">
+                                    {groupQuestions.map((item, passageQIdx) => {
+                                      const q = item.q;
+                                      const qNum = passageQNum + passageQIdx;
+                                      return (
+                                        <div key={q.id} className={passageQIdx > 0 ? 'border-t pt-4' : ''}>
+                                          <div className="flex items-start justify-between">
+                                            <div className="flex-1">
+                                              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                                <p className="font-medium">Q{qNum}. {q.text}</p>
+                                                <Badge variant="outline" className="text-xs">Reading Comprehension</Badge>
+                                                <Badge variant="secondary" className="text-xs">{q.marks} mark{q.marks !== 1 ? 's' : ''}</Badge>
+                                                <Badge variant="secondary" className="text-xs">-{q.negativeMarks ?? exam.settings?.negativeMarks ?? 0} neg</Badge>
+                                              </div>
+                                              <div className="grid gap-1 sm:grid-cols-2 mt-2">
+                                                {q.options.map((opt, j) => (
+                                                  <div key={j} className={`text-sm ${j === q.correctAnswer ? 'font-semibold text-success' : 'text-muted-foreground'}`}>
+                                                    <p>{String.fromCharCode(65 + j)}. {opt} {j === q.correctAnswer ? '(Correct)' : ''}</p>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                              <Button variant="outline" size="icon" className="bg-primary text-white hover:bg-primary/90" onClick={() => handleEditQuestion(q.id)}>
+                                                <Edit className="h-4 w-4 text-white" />
+                                              </Button>
+                                              <Button variant="ghost" size="icon" className="bg-destructive text-white hover:bg-destructive/90" onClick={() => handleDeleteQ(q.id)}>
+                                                <Trash2 className="h-4 w-4 text-white" />
+                                              </Button>
+                                            </div>
+                                          </div>
                                         </div>
-                                        <div className="grid gap-1 sm:grid-cols-2 mt-2">
+                                      );
+                                    })}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+
+                          {/* Display non-grouped questions */}
+                          {nonRCQuestions.map(({ q, idx }) => {
+                            const qNum = globalQNum++;
+                            return (
+                              <Card key={q.id}>
+                                <CardContent className="pt-6">
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                        <p className="font-medium">Q{qNum}. {q.text}</p>
+                                        <Badge variant="outline" className="text-xs">
+                                          {q.type === 'mcq' ? 'MCQ' : q.type === 'mcq-image' ? 'MCQ + Image' : q.type === 'true-false' ? 'True/False' : 'Reading Comprehension'}
+                                        </Badge>
+                                        <Badge variant="secondary" className="text-xs">{q.marks} mark{q.marks !== 1 ? 's' : ''}</Badge>
+                                        <Badge variant="secondary" className="text-xs">-{q.negativeMarks ?? exam.settings?.negativeMarks ?? 0} neg</Badge>
+                                      </div>
+                                      {q.imageUrl && <img src={q.imageUrl} alt="Question" className="mt-2 h-32 w-auto rounded border" />}
+                                      {q.type !== 'reading-comprehension' && (
+                                        <div className="mt-2 grid gap-1 sm:grid-cols-2">
                                           {q.options.map((opt, j) => (
                                             <div key={j} className={`text-sm ${j === q.correctAnswer ? 'font-semibold text-success' : 'text-muted-foreground'}`}>
                                               <p>{String.fromCharCode(65 + j)}. {opt} {j === q.correctAnswer ? '(Correct)' : ''}</p>
+                                              {q.optionImages?.[j] && <img src={q.optionImages[j]} alt={`Option ${String.fromCharCode(65 + j)}`} className="mt-1 h-20 w-auto rounded" />}
                                             </div>
                                           ))}
                                         </div>
-                                      </div>
-                                      <div className="flex gap-2">
-                                        <Button variant="outline" size="icon" className="bg-primary text-white hover:bg-primary/90" onClick={() => handleEditQuestion(q.id)}>
-                                          <Edit className="h-4 w-4 text-white" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" className="bg-destructive text-white hover:bg-destructive/90" onClick={() => handleDeleteQ(q.id)}>
-                                          <Trash2 className="h-4 w-4 text-white" />
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-
-                    {/* Display non-grouped questions */}
-                    {nonRCQuestions.map(({ q, idx }) => {
-                      const qNum = globalQNum++;
-                      return (
-                        <Card key={q.id}>
-                          <CardContent className="pt-6">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                  <p className="font-medium">Q{qNum}. {q.text}</p>
-                                  <Badge variant="outline" className="text-xs">
-                                    {q.type === 'mcq' ? 'MCQ' : q.type === 'mcq-image' ? 'MCQ + Image' : q.type === 'true-false' ? 'True/False' : 'Reading Comprehension'}
-                                  </Badge>
-                                  <Badge variant="secondary" className="text-xs">{q.marks} mark{q.marks !== 1 ? 's' : ''}</Badge>
-                                  <Badge variant="secondary" className="text-xs">-{q.negativeMarks ?? exam.settings?.negativeMarks ?? 0} neg</Badge>
-                                </div>
-                                {q.imageUrl && <img src={q.imageUrl} alt="Question" className="mt-2 h-32 w-auto rounded border" />}
-                                {q.type !== 'reading-comprehension' && (
-                                  <div className="mt-2 grid gap-1 sm:grid-cols-2">
-                                    {q.options.map((opt, j) => (
-                                      <div key={j} className={`text-sm ${j === q.correctAnswer ? 'font-semibold text-success' : 'text-muted-foreground'}`}>
-                                        <p>{String.fromCharCode(65 + j)}. {opt} {j === q.correctAnswer ? '(Correct)' : ''}</p>
-                                        {q.optionImages?.[j] && <img src={q.optionImages[j]} alt={`Option ${String.fromCharCode(65 + j)}`} className="mt-1 h-20 w-auto rounded" />}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                {q.type === 'reading-comprehension' && q.passage && (
-                                  <div className="mt-2 space-y-3">
-                                    <div className="p-3 bg-muted rounded text-sm">
-                                      <p className="font-medium mb-2">Passage:</p>
-                                      <p className="text-muted-foreground whitespace-pre-wrap">{q.passage}</p>
-                                    </div>
-                                    <div className="space-y-2">
-                                      <p className="font-medium text-sm">{q.text}</p>
-                                      <div className="grid gap-1 sm:grid-cols-2">
-                                        {q.options.map((opt, j) => (
-                                          <div key={j} className={`text-sm ${j === q.correctAnswer ? 'font-semibold text-success' : 'text-muted-foreground'}`}>
-                                            <p>{String.fromCharCode(65 + j)}. {opt} {j === q.correctAnswer ? '(Correct)' : ''}</p>
+                                      )}
+                                      {q.type === 'reading-comprehension' && q.passage && (
+                                        <div className="mt-2 space-y-3">
+                                          <div className="p-3 bg-muted rounded text-sm">
+                                            <p className="font-medium mb-2">Passage:</p>
+                                            <p className="text-muted-foreground whitespace-pre-wrap">{q.passage}</p>
                                           </div>
-                                        ))}
-                                      </div>
+                                          <div className="space-y-2">
+                                            <p className="font-medium text-sm">{q.text}</p>
+                                            <div className="grid gap-1 sm:grid-cols-2">
+                                              {q.options.map((opt, j) => (
+                                                <div key={j} className={`text-sm ${j === q.correctAnswer ? 'font-semibold text-success' : 'text-muted-foreground'}`}>
+                                                  <p>{String.fromCharCode(65 + j)}. {opt} {j === q.correctAnswer ? '(Correct)' : ''}</p>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <Button variant="outline" size="icon" className="bg-primary text-white hover:bg-primary/90" onClick={() => handleEditQuestion(q.id)}>
+                                        <Edit className="h-4 w-4 text-white" />
+                                      </Button>
+                                      <Button variant="ghost" size="icon" className="bg-destructive text-white hover:bg-destructive/90" onClick={() => handleDeleteQ(q.id)}>
+                                        <Trash2 className="h-4 w-4 text-white" />
+                                      </Button>
                                     </div>
                                   </div>
-                                )}
-                              </div>
-                              <div className="flex gap-2">
-                                <Button variant="outline" size="icon" className="bg-primary text-white hover:bg-primary/90" onClick={() => handleEditQuestion(q.id)}>
-                                  <Edit className="h-4 w-4 text-white" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="bg-destructive text-white hover:bg-destructive/90" onClick={() => handleDeleteQ(q.id)}>
-                                  <Trash2 className="h-4 w-4 text-white" />
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+                                </CardContent>
+                              </Card>
+                            );
+                          })}
+                        </div>
                       );
-                    })}
-                  </div>
-                );
-              });
-            })()}
+                    });
+                  })()}
                 </div>
               </div>
             </div>
           </TabsContent>
 
           <TabsContent value="participants" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Results Sheet</h3>
-            </div>
+            {(() => {
+              const filteredCandidates = getFilteredCandidates();
+              const totalFiltered = filteredCandidates.length;
+              const totalPages = Math.ceil(totalFiltered / pageSize) || 1;
+              const paginatedCandidates = pageSize === -1
+                ? filteredCandidates
+                : filteredCandidates.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-            {showFilters && (
-              <Card className="bg-blue-50 border-blue-200">
-                <CardContent className="pt-6">
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {/* Search */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Search (Name/Email)</Label>
-                      <Input 
-                        placeholder="Search..." 
-                        value={filterSearch} 
-                        onChange={(e) => setFilterSearch(e.target.value)}
-                        className="h-8 text-sm"
-                      />
+              return (
+                <>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Results Sheet</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Showing {totalFiltered > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, totalFiltered)} of {totalFiltered} candidates ({candidates.length} total)
+                      </p>
                     </div>
 
-                    {/* Attempt Status */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Attempt Status</Label>
-                      <select 
-                        aria-label="Filter by attempt status"
-                        value={filterAttempted} 
-                        onChange={(e) => setFilterAttempted(e.target.value as any)}
-                        className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm"
-                      >
-                        <option value="all">All</option>
-                        <option value="attempted">Attempted</option>
-                        <option value="notAttempted">Not Attempted</option>
-                      </select>
-                    </div>
+                    {/* View Switcher Toggle & Page Size */}
+                    <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-emerald-50/70 border border-emerald-200 px-2.5 py-1 rounded-xl">
+                        <span className="font-semibold text-emerald-950">Show:</span>
+                        <select
+                          aria-label="Items per page"
+                          value={pageSize}
+                          onChange={(e) => {
+                            setPageSize(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                          className="bg-transparent font-bold text-emerald-900 focus:outline-none cursor-pointer text-xs"
+                        >
+                          <option value={12}>12 / page</option>
+                          <option value={24}>24 / page</option>
+                          <option value={48}>48 / page</option>
+                          <option value={96}>96 / page</option>
+                          <option value={200}>200 / page</option>
+                          <option value={500}>500 / page</option>
+                        </select>
+                      </div>
 
-                    {/* Department */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Department</Label>
-                      <select 
-                        aria-label="Filter by department"
-                        value={filterDepartment} 
-                        onChange={(e) => setFilterDepartment(e.target.value)}
-                        className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm"
-                      >
-                        <option value="">All</option>
-                        {getUniqueValues('department').map(dept => (
-                          <option key={dept} value={dept}>{dept}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* College */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">College</Label>
-                      <select 
-                        aria-label="Filter by college"
-                        value={filterCollege} 
-                        onChange={(e) => setFilterCollege(e.target.value)}
-                        className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm"
-                      >
-                        <option value="">All</option>
-                        {getUniqueValues('college').map(college => (
-                          <option key={college} value={college}>{college}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Section */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Section</Label>
-                      <select 
-                        aria-label="Filter by section"
-                        value={filterSection} 
-                        onChange={(e) => setFilterSection(e.target.value)}
-                        className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm"
-                      >
-                        <option value="">All</option>
-                        {getUniqueValues('section').map(section => (
-                          <option key={section} value={section}>{section}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Percentage Range - Min */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Min Score %</Label>
-                      <Input 
-                        type="number" 
-                        min="0" 
-                        max="100" 
-                        value={filterPercentageMin} 
-                        onChange={(e) => setFilterPercentageMin(parseInt(e.target.value) || 0)}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-
-                    {/* Percentage Range - Max */}
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Max Score %</Label>
-                      <Input 
-                        type="number" 
-                        min="0" 
-                        max="100" 
-                        value={filterPercentageMax} 
-                        onChange={(e) => setFilterPercentageMax(parseInt(e.target.value) || 100)}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-
-                    {/* Reset Button */}
-                    <div className="flex items-end">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={resetFilters}
-                        className="w-full h-8 text-sm"
-                      >
-                        Reset Filters
-                      </Button>
+                      <div className="flex items-center bg-emerald-50/90 border-2 border-emerald-200 p-1 rounded-xl shadow-sm">
+                        <button
+                          type="button"
+                          onClick={() => setResultsViewMode('table')}
+                          className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${resultsViewMode === 'table'
+                              ? 'bg-primary text-white shadow-sm'
+                              : 'text-emerald-950 hover:bg-emerald-100/80'
+                            }`}
+                        >
+                          <TableIcon className="h-4 w-4" />
+                          <span>Table Form</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResultsViewMode('card')}
+                          className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${resultsViewMode === 'card'
+                              ? 'bg-primary text-white shadow-sm'
+                              : 'text-emerald-950 hover:bg-emerald-100/80'
+                            }`}
+                        >
+                          <LayoutGrid className="h-4 w-4" />
+                          <span>Card Form</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResultsViewMode('graph')}
+                          className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${resultsViewMode === 'graph'
+                              ? 'bg-primary text-white shadow-sm'
+                              : 'text-emerald-950 hover:bg-emerald-100/80'
+                            }`}
+                        >
+                          <BarChart3 className="h-4 w-4" />
+                          <span>3D Graphs & Analytics</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            )}
 
-            {(candidates.length === 0 && results.length === 0) ? (
-              <Card><CardContent className="py-12 text-center text-muted-foreground">No participants yet</CardContent></Card>
-            ) : (
-              <Card className="shadow-md overflow-hidden">
-                <CardContent className="pt-6">
-                  <div className="text-sm text-muted-foreground mb-4">
-                    Showing {getFilteredCandidates().length} of {candidates.length} candidates
-                  </div>
-
-                  {/* Desktop Table View */}
-                  <div className="hidden lg:block overflow-x-auto">
-                    <table className="min-w-full w-full text-sm table-fixed">
-                      <thead>
-                        <tr className="bg-green-100 border-b-2 border-green-200">
-                          <th className="px-4 py-3 font-semibold text-green-900 text-left">SL No</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-left">Name</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-left">Email</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-left">College</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-left">USN</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-left">Dept</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-left">Section</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-left">Attempted</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-left">Tab Switches</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-left">Section-wise</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-left">Status</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-center">Correct</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-center">Wrong</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-center">Score</th>
-                          <th className="px-4 py-3 font-semibold text-green-900 text-center">%</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {getFilteredCandidates().map((c, idx) => {
-                          const result = results.find(r => r.candidateId === c.id);
-                          const attempt = result ? getAttemptsList().find(a => a.id === result.attemptId) : undefined;
-                          return (
-                            <tr key={c.id} className={`border-b transition-colors hover:bg-green-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-green-50/30'}`}>
-                              <td className="px-4 py-3 font-semibold text-green-700">{idx + 1}</td>
-                              <td className="px-4 py-3 font-medium text-gray-900">{c.name}</td>
-                              <td className="px-4 py-3 text-gray-700 max-w-[220px] truncate overflow-hidden">{c.email}</td>
-                              <td className="px-4 py-3 text-gray-700 max-w-[180px] truncate overflow-hidden">{c.college}</td>
-                              <td className="px-4 py-3 text-gray-700">{c.usn}</td>
-                              <td className="px-4 py-3 text-gray-700">{c.department}</td>
-                              <td className="px-4 py-3 text-gray-700">{c.section}</td>
-                              <td className="px-4 py-3 text-gray-700">{attempt ? attempt.answers.length : 'N/A'}</td>
-                              <td className="px-4 py-3 text-gray-700">{attempt?.tabSwitches ?? 0}</td>
-                              <td className="px-4 py-3 max-w-[260px] whitespace-normal break-words text-gray-700 overflow-hidden">{attempt ? getSectionScoresText(attempt) : 'N/A'}</td>
-                              <td className="px-4 py-3 text-left">
-                                <Badge variant={getSubmissionStatus(attempt) === 'Limit Exceeded' ? 'destructive' : 'default'}>
-                                  {getSubmissionStatus(attempt)}
-                                </Badge>
-                              </td>
-                              <td className="px-4 py-3 text-center text-green-600 font-semibold">{result?.correctAnswers ?? 0}</td>
-                              <td className="px-4 py-3 text-center text-rose-600 font-semibold">{result?.wrongAnswers ?? 0}</td>
-                              <td className="px-4 py-3 text-center font-bold text-gray-900">{result ? `${result.obtainedMarks}/${result.totalMarks}` : 'N/A'}</td>
-                              <td className="px-4 py-3 text-center"><Badge variant={result && result.percentage >= 50 ? 'default' : 'destructive'}>{result ? `${result.percentage}%` : 'N/A'}</Badge></td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Mobile Card View */}
-                  <div className="lg:hidden block space-y-3">
-                    {getFilteredCandidates().map((c, idx) => {
-                      const result = results.find(r => r.candidateId === c.id);
-                      const attempt = result ? getAttemptsList().find(a => a.id === result.attemptId) : undefined;
-                      return (
-                        <div key={c.id} className="bg-white border border-green-200 rounded-lg p-4 shadow-sm">
-                          {/* Header: SL No and Name */}
-                          <div className="flex justify-between items-start mb-3 pb-3 border-b border-green-100">
-                            <div>
-                              <p className="text-xs font-semibold text-green-600">#{idx + 1}</p>
-                              <p className="text-base font-bold text-gray-900">{c.name}</p>
-                            </div>
-                            <Badge variant={getSubmissionStatus(attempt) === 'Limit Exceeded' ? 'destructive' : 'default'}>
-                              {getSubmissionStatus(attempt)}
-                            </Badge>
+                  {showFilters && (
+                    <Card className="bg-blue-50 border-blue-200">
+                      <CardContent className="pt-6">
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                          {/* Search */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Search (Name/Email)</Label>
+                            <Input
+                              placeholder="Search..."
+                              value={filterSearch}
+                              onChange={(e) => {
+                                setFilterSearch(e.target.value);
+                                setCurrentPage(1);
+                              }}
+                              className="h-8 text-sm"
+                            />
                           </div>
 
-                          {/* Email */}
-                          <div className="mb-2 pb-2 border-b border-green-100">
-                            <p className="text-xs font-medium text-green-700">Email</p>
-                            <p className="text-sm text-gray-700 break-words">{c.email}</p>
+                          {/* Attempt Status */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Attempt Status</Label>
+                            <select
+                              aria-label="Filter by attempt status"
+                              value={filterAttempted}
+                              onChange={(e) => {
+                                setFilterAttempted(e.target.value as any);
+                                setCurrentPage(1);
+                              }}
+                              className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm"
+                            >
+                              <option value="all">All</option>
+                              <option value="attempted">Attempted</option>
+                              <option value="notAttempted">Not Attempted</option>
+                            </select>
                           </div>
 
-                          {/* Key Metrics Grid */}
-                          <div className="grid grid-cols-2 gap-3 mb-3 pb-3 border-b border-green-100">
-                            <div>
-                              <p className="text-xs font-medium text-green-700">Score</p>
-                              <p className="text-sm font-bold text-gray-900">{result ? `${result.obtainedMarks}/${result.totalMarks}` : 'N/A'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-green-700">Percentage</p>
-                              <p className="text-sm font-bold text-gray-900">{result ? `${result.percentage}%` : 'N/A'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-green-700">Correct</p>
-                              <p className="text-sm font-semibold text-green-600">{result?.correctAnswers ?? 0}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-green-700">Wrong</p>
-                              <p className="text-sm font-semibold text-rose-600">{result?.wrongAnswers ?? 0}</p>
-                            </div>
+                          {/* Department */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Department</Label>
+                            <select
+                              aria-label="Filter by department"
+                              value={filterDepartment}
+                              onChange={(e) => {
+                                setFilterDepartment(e.target.value);
+                                setCurrentPage(1);
+                              }}
+                              className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm"
+                            >
+                              <option value="">All</option>
+                              {getUniqueValues('department').map(dept => (
+                                <option key={dept} value={dept}>{dept}</option>
+                              ))}
+                            </select>
                           </div>
 
-                          {/* Additional Details */}
-                          <div className="grid grid-cols-2 gap-3 mb-3 pb-3 border-b border-green-100">
-                            <div>
-                              <p className="text-xs font-medium text-green-700">Attempted</p>
-                              <p className="text-sm text-gray-700">{attempt ? attempt.answers.length : 'N/A'}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-green-700">Tab Switches</p>
-                              <p className="text-sm text-gray-700">{attempt?.tabSwitches ?? 0}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-green-700">College</p>
-                              <p className="text-sm text-gray-700">{c.college}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-green-700">USN</p>
-                              <p className="text-sm text-gray-700">{c.usn}</p>
-                            </div>
+                          {/* College */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">College</Label>
+                            <select
+                              aria-label="Filter by college"
+                              value={filterCollege}
+                              onChange={(e) => {
+                                setFilterCollege(e.target.value);
+                                setCurrentPage(1);
+                              }}
+                              className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm"
+                            >
+                              <option value="">All</option>
+                              {getUniqueValues('college').map(college => (
+                                <option key={college} value={college}>{college}</option>
+                              ))}
+                            </select>
                           </div>
 
-                          {/* Department and Section */}
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <p className="text-xs font-medium text-green-700">Dept</p>
-                              <p className="text-sm text-gray-700">{c.department}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-green-700">Section</p>
-                              <p className="text-sm text-gray-700">{c.section}</p>
-                            </div>
+                          {/* Section */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Section</Label>
+                            <select
+                              aria-label="Filter by section"
+                              value={filterSection}
+                              onChange={(e) => {
+                                setFilterSection(e.target.value);
+                                setCurrentPage(1);
+                              }}
+                              className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm"
+                            >
+                              <option value="">All</option>
+                              {getUniqueValues('section').map(section => (
+                                <option key={section} value={section}>{section}</option>
+                              ))}
+                            </select>
                           </div>
 
-                          {/* Section-wise Scores */}
-                          {attempt && (
-                            <div className="mt-3 pt-3 border-t border-green-100">
-                              <p className="text-xs font-medium text-green-700 mb-2">Section-wise</p>
-                              <p className="text-xs text-gray-700 break-words">{getSectionScoresText(attempt)}</p>
-                            </div>
-                          )}
+                          {/* Percentage Range - Min */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Min Score %</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={filterPercentageMin}
+                              onChange={(e) => {
+                                setFilterPercentageMin(parseInt(e.target.value) || 0);
+                                setCurrentPage(1);
+                              }}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+
+                          {/* Percentage Range - Max */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Max Score %</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={filterPercentageMax}
+                              onChange={(e) => {
+                                setFilterPercentageMax(parseInt(e.target.value) || 100);
+                                setCurrentPage(1);
+                              }}
+                              className="h-8 text-sm"
+                            />
+                          </div>
+
+                          {/* Reset Button */}
+                          <div className="flex items-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                resetFilters();
+                                setCurrentPage(1);
+                              }}
+                              className="w-full h-8 text-sm"
+                            >
+                              Reset Filters
+                            </Button>
+                          </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {(candidates.length === 0 && results.length === 0) ? (
+                    <Card><CardContent className="py-12 text-center text-muted-foreground">No participants yet</CardContent></Card>
+                  ) : totalFiltered === 0 ? (
+                    <Card className="shadow-sm border-dashed">
+                      <CardContent className="py-12 text-center">
+                        <p className="text-muted-foreground font-medium">No candidates match the current filter criteria.</p>
+                        <Button variant="outline" size="sm" onClick={() => { resetFilters(); setCurrentPage(1); }} className="mt-3">
+                          Reset Filters
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ) : resultsViewMode === 'table' ? (
+                    /* Table Form View */
+                    <Card className="shadow-md overflow-hidden border-emerald-200">
+                      <CardContent className="p-0">
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full w-full text-sm">
+                            <thead>
+                              <tr className="bg-emerald-100/90 border-b-2 border-emerald-200">
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">Sl No</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">Name</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">Email</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">College</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">USN</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">Dept</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap">Attempted</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap">Tab Switches</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-left min-w-[200px]">Section-wise</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap min-w-[150px]">Question-wise Analysis</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap">Status</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap">Correct</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap">Wrong</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap">Score</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap">%</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-emerald-100/70">
+                              {paginatedCandidates.map((c, pIdx) => {
+                                const actualIdx = (currentPage - 1) * pageSize + pIdx;
+                                const result = results.find(r => r.candidateId === c.id);
+                                const attempt = result ? getAttemptsList().find(a => a.id === result.attemptId) : undefined;
+                                const sectionData = attempt ? getSectionScoresData(attempt) : [];
+                                const status = getSubmissionStatus(attempt);
+                                return (
+                                  <tr key={c.id} className={`transition-colors hover:bg-emerald-50/60 ${pIdx % 2 === 0 ? 'bg-white' : 'bg-emerald-50/20'}`}>
+                                    <td className="px-4 py-3.5 font-bold text-emerald-800 text-center whitespace-nowrap">{actualIdx + 1}</td>
+                                    <td className="px-4 py-3.5 font-semibold text-gray-900 whitespace-nowrap">{c.name}</td>
+                                    <td className="px-4 py-3.5 text-gray-700 max-w-[200px] truncate" title={c.email}>{c.email}</td>
+                                    <td className="px-4 py-3.5 text-gray-700 max-w-[160px] truncate" title={c.college}>{c.college}</td>
+                                    <td className="px-4 py-3.5 text-gray-700 font-mono text-xs whitespace-nowrap">{c.usn}</td>
+                                    <td className="px-4 py-3.5 text-gray-700 whitespace-nowrap">{c.department}</td>
+                                    <td className="px-4 py-3.5 text-gray-700 whitespace-nowrap text-center">{c.section}</td>
+                                    <td className="px-4 py-3.5 text-gray-700 text-center whitespace-nowrap">{attempt ? attempt.answers.length : 'N/A'}</td>
+                                    <td className="px-4 py-3.5 text-gray-700 text-center whitespace-nowrap">
+                                      <span className={attempt && attempt.tabSwitches > 0 ? "font-bold text-amber-700" : ""}>
+                                        {attempt?.tabSwitches ?? 0}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3.5 text-gray-700">
+                                      {sectionData.length > 0 ? (
+                                        <div className="flex flex-col gap-1 py-0.5">
+                                          {sectionData.map((sec, sIdx) => (
+                                            <div key={sIdx} className="inline-flex items-center justify-between gap-1.5 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded text-xs">
+                                              <span className="font-semibold text-emerald-950 truncate max-w-[110px]" title={sec.section}>{sec.section}:</span>
+                                              <span className="font-bold text-emerald-800 shrink-0">{sec.obtained}/{sec.total}</span>
+                                              <span className="text-[10px] text-emerald-600 shrink-0">({sec.percent}%)</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground text-xs">{attempt ? 'General' : 'N/A'}</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                      {attempt && exam && exam.questions && exam.questions.length > 0 ? (
+                                        <div className="flex flex-col items-center gap-1.5 py-0.5">
+                                          {/* Mini question visual dots */}
+                                          <div className="flex items-center justify-center gap-0.5 max-w-[140px] flex-wrap">
+                                            {exam.questions.map((q, qI) => {
+                                              const ans = attempt.answers?.find(a => a.questionId === q.id);
+                                              const isAttempted = ans && ans.selectedAnswer !== null && ans.selectedAnswer !== undefined;
+                                              const isCorrect = isAttempted && Number(ans.selectedAnswer) === Number(q.correctAnswer);
+                                              const isWrong = isAttempted && !isCorrect;
+
+                                              return (
+                                                <span
+                                                  key={q.id}
+                                                  title={`Q${qI + 1} (${q.section || 'General'}): ${isCorrect ? '✓ Correct' : isWrong ? '✗ Incorrect' : '○ Skipped'}`}
+                                                  className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded text-[8px] font-bold ${
+                                                    isCorrect
+                                                      ? 'bg-emerald-600 text-white'
+                                                      : isWrong
+                                                      ? 'bg-rose-500 text-white'
+                                                      : 'bg-gray-200 text-gray-600'
+                                                  }`}
+                                                >
+                                                  {isCorrect ? '✓' : isWrong ? '✗' : '·'}
+                                                </span>
+                                              );
+                                            })}
+                                          </div>
+                                          <Button
+                                            size="sm"
+                                            onClick={() => setSelectedCandidateForQAnalysis({ candidate: c, attempt, result })}
+                                            className="h-6 px-2 text-[10px] font-bold text-white bg-[#008037] hover:bg-black border border-[#008037] shadow-xs gap-1 inline-flex items-center cursor-pointer transition-colors"
+                                          >
+                                            <Eye className="h-3 w-3 text-white" />
+                                            <span className="text-white font-bold">Q-Breakdown</span>
+                                          </Button>
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400 text-xs">-</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3.5 text-center whitespace-nowrap">
+                                      <Badge variant={status === 'Limit Exceeded' ? 'destructive' : 'default'} className="font-semibold text-xs">
+                                        {status}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3.5 text-center text-emerald-700 font-bold whitespace-nowrap">{result?.correctAnswers ?? 0}</td>
+                                    <td className="px-4 py-3.5 text-center text-rose-600 font-bold whitespace-nowrap">{result?.wrongAnswers ?? 0}</td>
+                                    <td className="px-4 py-3.5 text-center font-extrabold text-gray-900 whitespace-nowrap">{result ? `${result.obtainedMarks}/${result.totalMarks}` : 'N/A'}</td>
+                                    <td className="px-4 py-3.5 text-center whitespace-nowrap">
+                                      <Badge variant={result && result.percentage >= 50 ? 'default' : 'destructive'} className="font-extrabold text-xs">
+                                        {result ? `${result.percentage}%` : 'N/A'}
+                                      </Badge>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : resultsViewMode === 'card' ? (
+                    /* Card Form View - Compact Low-Height Format with Decreased Width */
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {paginatedCandidates.map((c, pIdx) => {
+                        const actualIdx = (currentPage - 1) * pageSize + pIdx;
+                        const result = results.find(r => r.candidateId === c.id);
+                        const attempt = result ? getAttemptsList().find(a => a.id === result.attemptId) : undefined;
+                        const status = getSubmissionStatus(attempt);
+
+                        return (
+                          <div
+                            key={c.id}
+                            className="bg-white border border-green-200/90 rounded-xl p-3 shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-2 hover:border-green-400"
+                          >
+                            {/* Line 1: Header (SL No, Name, Email, Status Badge) */}
+                            <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-green-100">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="text-xs font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200 shrink-0">
+                                  #{actualIdx + 1}
+                                </span>
+                                <h4 className="text-sm font-bold text-gray-900 truncate" title={c.name}>
+                                  {c.name}
+                                </h4>
+                              </div>
+                              <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold text-center shrink-0 shadow-2xs ${status === 'Limit Exceeded'
+                                  ? 'bg-destructive text-white'
+                                  : !attempt
+                                    ? 'bg-gray-200 text-gray-700'
+                                    : 'bg-[#0a7a3b] text-white'
+                                }`}>
+                                {status}
+                              </div>
+                            </div>
+
+                            {/* Line 2: Key Metrics Grid (Score, %, Correct, Wrong, Attempted, Tab Switches) */}
+                            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1 py-1 px-1.5 rounded-lg bg-green-50/50 border border-green-100 text-center">
+                              <div>
+                                <p className="text-[10px] font-semibold text-green-700">Score</p>
+                                <p className="text-xs font-bold text-gray-900">
+                                  {result ? `${result.obtainedMarks}/${result.totalMarks}` : 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-semibold text-green-700">Percentage</p>
+                                <p className="text-xs font-bold text-gray-900">
+                                  {result ? `${typeof result.percentage === 'number' ? result.percentage.toFixed(2) : result.percentage}%` : 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-semibold text-green-700">Correct</p>
+                                <p className="text-xs font-bold text-green-600">{result?.correctAnswers ?? 0}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-semibold text-green-700">Wrong</p>
+                                <p className="text-xs font-bold text-red-600">{result?.wrongAnswers ?? 0}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-semibold text-green-700">Attempted</p>
+                                <p className="text-xs font-semibold text-gray-700">{attempt ? attempt.answers.length : 'N/A'}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-semibold text-green-700">Tab Switches</p>
+                                <p className={`text-xs ${attempt && attempt.tabSwitches > 0 ? 'font-bold text-amber-700' : 'text-gray-700 font-semibold'}`}>
+                                  {attempt?.tabSwitches ?? 0}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Line 3: Candidate Details */}
+                            <div className="grid grid-cols-2 gap-1.5 text-xs">
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-semibold text-green-700 block">Email</span>
+                                <span className="text-xs text-gray-700 truncate block" title={c.email}>{c.email}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-semibold text-green-700 block">College</span>
+                                <span className="text-xs text-gray-700 truncate block" title={c.college}>{c.college || '-'}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-semibold text-green-700 block">USN</span>
+                                <span className="text-xs text-gray-700 font-mono truncate block" title={c.usn}>{c.usn || '-'}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-semibold text-green-700 block">Dept / Sec</span>
+                                <span className="text-xs text-gray-700 truncate block" title={`${c.department || '-'}${c.section ? ` / ${c.section}` : ''}`}>
+                                  {c.department || '-'}{c.section ? ` / ${c.section}` : ''}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Line 4: Section-wise Scores */}
+                            <div className="pt-1 border-t border-green-100 flex items-baseline gap-1 text-xs">
+                              <span className="text-[10px] font-semibold text-green-700 shrink-0">Section-wise:</span>
+                              <span className="text-[11px] text-gray-700 truncate flex-1" title={attempt ? getSectionScoresText(attempt) : 'N/A'}>
+                                {attempt ? getSectionScoresText(attempt) : 'N/A'}
+                              </span>
+                            </div>
+
+                            {/* Line 5: Question-wise Analysis */}
+                            <div className="pt-1.5 border-t border-green-100 flex items-center justify-between gap-1 text-xs">
+                              <div className="flex items-center gap-1 min-w-0">
+                                <span className="text-[10px] font-semibold text-green-700 shrink-0">Q-Wise:</span>
+                                {attempt && exam && exam.questions ? (
+                                  <div className="flex items-center gap-0.5 overflow-x-auto max-w-[140px] py-0.5">
+                                    {exam.questions.map((q, qIndex) => {
+                                      const ans = attempt.answers.find(a => a.questionId === q.id);
+                                      const isCorrect = ans && ans.selectedAnswer === q.correctAnswer;
+                                      const isWrong = ans && ans.selectedAnswer !== null && ans.selectedAnswer !== undefined && ans.selectedAnswer !== q.correctAnswer;
+                                      return (
+                                        <span
+                                          key={q.id || qIndex}
+                                          title={`Q${qIndex + 1} (${q.section || 'General'}): ${isCorrect ? '✓ Correct' : isWrong ? '✗ Incorrect' : '○ Skipped'}`}
+                                          className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded text-[8px] font-bold ${
+                                            isCorrect
+                                              ? 'bg-emerald-600 text-white'
+                                              : isWrong
+                                              ? 'bg-rose-500 text-white'
+                                              : 'bg-gray-200 text-gray-600'
+                                          }`}
+                                        >
+                                          {isCorrect ? '✓' : isWrong ? '✗' : '·'}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400 text-[11px]">-</span>
+                                )}
+                              </div>
+                              {attempt && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => setSelectedCandidateForQAnalysis({ candidate: c, attempt, result })}
+                                  className="h-5 px-1.5 text-[9px] font-bold text-white bg-[#008037] hover:bg-black border border-[#008037] shadow-xs gap-0.5 shrink-0 inline-flex items-center cursor-pointer transition-colors"
+                                >
+                                  <Eye className="h-2.5 w-2.5 text-white" />
+                                  <span className="text-white font-bold">Details</span>
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* 3D Graphs & Detailed Analytics View */
+                    <ExamResults3DAnalytics
+                      exam={exam}
+                      candidates={getFilteredCandidates()}
+                      results={results}
+                      attempts={getAttemptsList()}
+                      getSectionScoresData={getSectionScoresData}
+                      getSubmissionStatus={getSubmissionStatus}
+                    />
+                  )}
+
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && resultsViewMode !== 'graph' && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-emerald-100">
+                      <div className="text-xs text-muted-foreground">
+                        Showing <span className="font-semibold text-gray-900">{(currentPage - 1) * pageSize + 1}</span> to{' '}
+                        <span className="font-semibold text-gray-900">
+                          {Math.min(currentPage * pageSize, totalFiltered)}
+                        </span>{' '}
+                        of <span className="font-semibold text-gray-900">{totalFiltered}</span> candidates
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Page Size Selector */}
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mr-2">
+                          <span>Per page:</span>
+                          <select
+                            aria-label="Items per page"
+                            value={pageSize}
+                            onChange={(e) => {
+                              setPageSize(Number(e.target.value));
+                              setCurrentPage(1);
+                            }}
+                            className="h-7 rounded-md border border-emerald-200 bg-white px-2 text-xs font-semibold text-gray-800 cursor-pointer"
+                          >
+                            <option value={12}>12</option>
+                            <option value={24}>24</option>
+                            <option value={48}>48</option>
+                            <option value={96}>96</option>
+                            <option value={200}>200</option>
+                          </select>
+                        </div>
+
+                        {/* Navigation Buttons */}
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(1)}
+                            disabled={currentPage === 1}
+                            className="h-7 w-7 p-0"
+                            title="First Page"
+                          >
+                            <ChevronsLeft className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="h-7 w-7 p-0"
+                            title="Previous Page"
+                          >
+                            <ChevronLeft className="h-3.5 w-3.5" />
+                          </Button>
+
+                          <span className="text-xs font-semibold px-2">
+                            Page {currentPage} of {totalPages}
+                          </span>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="h-7 w-7 p-0"
+                            title="Next Page"
+                          >
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(totalPages)}
+                            disabled={currentPage === totalPages}
+                            className="h-7 w-7 p-0"
+                            title="Last Page"
+                          >
+                            <ChevronsRight className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </TabsContent>
         </Tabs>
 
@@ -1549,20 +1948,20 @@ const ExamManage = () => {
                   <Label className="text-base font-semibold">Data to Export</Label>
                   <div className="space-y-2">
                     <label className="flex items-center gap-3 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        name="exportData" 
-                        checked={!exportAllData} 
+                      <input
+                        type="radio"
+                        name="exportData"
+                        checked={!exportAllData}
                         onChange={() => setExportAllData(false)}
                         className="accent-primary"
                       />
                       <span>Export Filtered Results ({getFilteredCandidates().length} candidates)</span>
                     </label>
                     <label className="flex items-center gap-3 cursor-pointer">
-                      <input 
-                        type="radio" 
-                        name="exportData" 
-                        checked={exportAllData} 
+                      <input
+                        type="radio"
+                        name="exportData"
+                        checked={exportAllData}
                         onChange={() => setExportAllData(true)}
                         className="accent-primary"
                       />
@@ -1591,8 +1990,8 @@ const ExamManage = () => {
                       { id: 'percentage', label: 'Percentage' },
                     ].map(col => (
                       <label key={col.id} className="flex items-center gap-2 cursor-pointer">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={exportColumns.has(col.id)}
                           onChange={() => toggleExportColumn(col.id)}
                           className="accent-primary"
@@ -1604,15 +2003,22 @@ const ExamManage = () => {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-2 justify-end pt-4 border-t">
-                  <Button 
-                    variant="outline" 
+                <div className="flex flex-wrap gap-2 justify-end pt-4 border-t">
+                  <Button
+                    variant="outline"
                     onClick={() => setShowExportDialog(false)}
                   >
                     Cancel
                   </Button>
-                  <Button 
-                    className="gap-2"
+                  <Button
+                    onClick={() => handleExportPdf(!exportAllData)}
+                    className="bg-[#008037] text-white hover:bg-black font-bold gap-2"
+                  >
+                    <FileText className="h-4 w-4" />
+                    Export PDF Report
+                  </Button>
+                  <Button
+                    className="gap-2 bg-primary text-white hover:bg-primary/90 font-bold"
                     onClick={handleExport}
                   >
                     <Download className="h-4 w-4" />
@@ -1623,6 +2029,237 @@ const ExamManage = () => {
             </Card>
           </div>
         )}
+
+        {/* Candidate Question-Wise Breakdown Dialog */}
+        <Dialog open={!!selectedCandidateForQAnalysis} onOpenChange={(open) => !open && setSelectedCandidateForQAnalysis(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden bg-slate-50">
+            {selectedCandidateForQAnalysis && (
+              <>
+                {/* Header */}
+                <div className="bg-white border-b border-emerald-100 p-5 shrink-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Candidate Breakdown
+                        </span>
+                        <span className="text-xs text-muted-foreground font-mono">
+                          USN: {selectedCandidateForQAnalysis.candidate.usn || 'N/A'}
+                        </span>
+                      </div>
+                      <h2 className="text-xl font-bold text-gray-900 mt-1">
+                        {selectedCandidateForQAnalysis.candidate.name}
+                      </h2>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedCandidateForQAnalysis.candidate.email} • {selectedCandidateForQAnalysis.candidate.department || 'General'}
+                        {selectedCandidateForQAnalysis.candidate.section ? ` (Sec ${selectedCandidateForQAnalysis.candidate.section})` : ''}
+                      </p>
+                    </div>
+
+                    {/* Overall Score Badge */}
+                    <div className="flex items-center gap-2 bg-emerald-50/80 border border-emerald-200 rounded-xl p-3">
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase font-bold text-emerald-700">Total Score</p>
+                        <p className="text-lg font-black text-emerald-900 leading-tight">
+                          {selectedCandidateForQAnalysis.result
+                            ? `${selectedCandidateForQAnalysis.result.obtainedMarks} / ${selectedCandidateForQAnalysis.result.totalMarks}`
+                            : 'N/A'}
+                        </p>
+                      </div>
+                      <div className="h-9 w-px bg-emerald-200" />
+                      <div className="text-left">
+                        <p className="text-[10px] uppercase font-bold text-emerald-700">Percentage</p>
+                        <p className="text-lg font-black text-emerald-800 leading-tight">
+                          {selectedCandidateForQAnalysis.result ? `${selectedCandidateForQAnalysis.result.percentage}%` : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary metric chips */}
+                  <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100 text-xs">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 font-bold">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Correct: {selectedCandidateForQAnalysis.result?.correctAnswers ?? 0}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-100 text-rose-800 font-bold">
+                      <XCircle className="h-3.5 w-3.5" /> Wrong: {selectedCandidateForQAnalysis.result?.wrongAnswers ?? 0}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-200 text-gray-700 font-bold">
+                      <MinusCircle className="h-3.5 w-3.5" /> Skipped: {
+                        exam?.questions
+                          ? Math.max(0, exam.questions.length - ((selectedCandidateForQAnalysis.result?.correctAnswers ?? 0) + (selectedCandidateForQAnalysis.result?.wrongAnswers ?? 0)))
+                          : 0
+                      }
+                    </span>
+                    {selectedCandidateForQAnalysis.attempt && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-100 text-amber-900 font-medium ml-auto">
+                        Tab Switches: {selectedCandidateForQAnalysis.attempt.tabSwitches}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Question List */}
+                <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                  {exam?.questions && exam.questions.length > 0 ? (
+                    exam.questions.map((q, idx) => {
+                      const ans = selectedCandidateForQAnalysis.attempt?.answers.find(a => a.questionId === q.id);
+                      const isAnswered = ans !== undefined && ans.selectedAnswer !== null && ans.selectedAnswer !== undefined;
+                      const isCorrect = isAnswered && ans.selectedAnswer === q.correctAnswer;
+                      const isWrong = isAnswered && ans.selectedAnswer !== q.correctAnswer;
+                      const earnedMarks = isCorrect
+                        ? (q.marks || 1)
+                        : isWrong
+                        ? -(q.negativeMarks ?? exam.settings?.negativeMarks ?? 0)
+                        : 0;
+
+                      return (
+                        <div
+                          key={q.id || idx}
+                          className={`bg-white rounded-xl border p-4 shadow-2xs transition-all ${
+                            isCorrect
+                              ? 'border-emerald-300 ring-1 ring-emerald-200/50'
+                              : isWrong
+                              ? 'border-rose-300 ring-1 ring-rose-200/50'
+                              : 'border-gray-200'
+                          }`}
+                        >
+                          {/* Question header */}
+                          <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-gray-100">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-sm text-gray-900">
+                                Question {idx + 1}
+                              </span>
+                              {q.section && (
+                                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  {q.section}
+                                </span>
+                              )}
+                              <span className="text-xs text-muted-foreground">
+                                (+{q.marks || 1} / -{q.negativeMarks ?? exam.settings?.negativeMarks ?? 0} marks)
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {isCorrect ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-600 text-white">
+                                  <CheckCircle2 className="h-3 w-3" /> Correct (+{earnedMarks})
+                                </span>
+                              ) : isWrong ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-600 text-white">
+                                  <XCircle className="h-3 w-3" /> Wrong ({earnedMarks})
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-200 text-gray-700">
+                                  <MinusCircle className="h-3 w-3" /> Skipped (0)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Reading Comprehension Passage */}
+                          {q.passage && (
+                            <div className="mb-3 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-gray-700 italic max-h-32 overflow-y-auto">
+                              <span className="font-bold not-italic block mb-1 text-slate-800">Passage:</span>
+                              {q.passage}
+                            </div>
+                          )}
+
+                          {/* Question Text */}
+                          <p className="text-sm font-medium text-gray-900 mb-3 whitespace-pre-wrap">
+                            {q.text}
+                          </p>
+
+                          {/* Question Image if present */}
+                          {q.imageUrl && (
+                            <div className="mb-3">
+                              <img
+                                src={q.imageUrl}
+                                alt={`Question ${idx + 1}`}
+                                className="max-h-48 rounded border border-gray-200 object-contain"
+                              />
+                            </div>
+                          )}
+
+                          {/* Options */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {q.options.map((opt, oIdx) => {
+                              const isCandidateChoice = ans?.selectedAnswer === oIdx;
+                              const isRightAnswer = q.correctAnswer === oIdx;
+
+                              let optBorder = 'border-gray-200 bg-gray-50/50 text-gray-700';
+                              if (isRightAnswer && isCandidateChoice) {
+                                optBorder = 'border-emerald-500 bg-emerald-50 text-emerald-950 font-semibold ring-1 ring-emerald-400';
+                              } else if (isRightAnswer) {
+                                optBorder = 'border-emerald-400 bg-emerald-50/60 text-emerald-900 font-semibold border-dashed';
+                              } else if (isCandidateChoice) {
+                                optBorder = 'border-rose-400 bg-rose-50 text-rose-950 font-semibold ring-1 ring-rose-400';
+                              }
+
+                              return (
+                                <div
+                                  key={oIdx}
+                                  className={`p-2.5 rounded-lg border text-xs flex items-start gap-2 ${optBorder}`}
+                                >
+                                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
+                                    isRightAnswer
+                                      ? 'bg-emerald-600 text-white'
+                                      : isCandidateChoice
+                                      ? 'bg-rose-500 text-white'
+                                      : 'bg-gray-200 text-gray-700'
+                                  }`}>
+                                    {String.fromCharCode(65 + oIdx)}
+                                  </span>
+
+                                  <div className="flex-1 min-w-0">
+                                    <p className="break-words">{opt}</p>
+                                    {q.optionImages && q.optionImages[oIdx] && (
+                                      <img
+                                        src={q.optionImages[oIdx]}
+                                        alt={`Option ${String.fromCharCode(65 + oIdx)}`}
+                                        className="mt-1.5 max-h-24 rounded border object-contain"
+                                      />
+                                    )}
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                      {isRightAnswer && (
+                                        <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-0.5">
+                                          <CheckCircle2 className="h-2.5 w-2.5" /> Correct Answer
+                                        </span>
+                                      )}
+                                      {isCandidateChoice && (
+                                        <span className={`text-[10px] font-bold flex items-center gap-0.5 ${isRightAnswer ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                          • Candidate Selected
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-10 text-muted-foreground text-sm">
+                      No question details found for this exam.
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="bg-white border-t border-emerald-100 p-3 px-5 flex justify-end shrink-0">
+                  <Button
+                    onClick={() => setSelectedCandidateForQAnalysis(null)}
+                    className="bg-[#008037] text-white hover:bg-black font-bold px-4 py-1.5 text-xs shadow-xs"
+                  >
+                    Close Breakdown
+                  </Button>
+                </div>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
