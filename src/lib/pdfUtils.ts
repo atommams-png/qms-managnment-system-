@@ -157,7 +157,7 @@ function draw3DDonutOnCanvas(
 
   if (total <= 0) {
     ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 20px Inter, sans-serif';
+    ctx.font = 'bold 20px Inter, Century Gothic';
     ctx.textAlign = 'center';
     ctx.fillText('No data available', centerX, centerY);
     return;
@@ -197,7 +197,7 @@ function draw3DDonutOnCanvas(
 
     ctx.save();
     ctx.fillStyle = slice.color;
-    ctx.font = 'bold 18px Inter, sans-serif';
+    ctx.font = 'bold 18px Century Gothic';
     ctx.textAlign = lx > centerX ? 'left' : 'right';
     ctx.textBaseline = 'middle';
     ctx.fillText(`${slice.label}: ${slice.percentStr || Math.round((slice.value / total) * 100) + '%'} (${slice.count ?? slice.value})`, lx, ly);
@@ -221,12 +221,12 @@ function generateChartHeader(
   ctx.fillRect(0, 0, width, 14);
 
   ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 30px Inter, system-ui, sans-serif';
+  ctx.font = 'bold 30px Century Gothic';
   ctx.textAlign = 'left';
   ctx.fillText(title, 40, 60);
 
   ctx.fillStyle = '#059669';
-  ctx.font = 'bold 18px Inter, system-ui, sans-serif';
+  ctx.font = 'bold 18px Century Gothic';
   ctx.fillText(subtitle, 40, 92);
 
   ctx.strokeStyle = '#e2e8f0';
@@ -309,16 +309,16 @@ function createScoreDistributionChart(
 
     ctx.save();
     ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 24px Inter, sans-serif';
+    ctx.font = 'bold 24px Century Gothic';
     ctx.textAlign = 'center';
     ctx.fillText(`${count}`, bx + barWidth / 2 + depth / 2, by - depth - 16);
 
     ctx.fillStyle = '#64748b';
-    ctx.font = 'bold 16px Inter, sans-serif';
+    ctx.font = 'bold 16px Century Gothic';
     ctx.fillText(`(${pctShare}%)`, bx + barWidth / 2 + depth / 2, by - depth + 6);
 
     ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 20px Inter, sans-serif';
+    ctx.font = 'bold 20px Century Gothic';
     ctx.fillText(b.label, bx + barWidth / 2, floorY + 40);
     ctx.restore();
   });
@@ -361,14 +361,14 @@ function createPassFailDonutChart(
 
   ctx.save();
   ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 36px Inter, sans-serif';
+  ctx.font = 'bold 36px Century Gothic';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const passRate = (passCount + failCount) > 0 ? Math.round((passCount / (passCount + failCount)) * 100) : 0;
   ctx.fillText(`${passRate}%`, 700, 410);
 
   ctx.fillStyle = '#059669';
-  ctx.font = 'bold 18px Inter, sans-serif';
+  ctx.font = 'bold 18px Century Gothic';
   ctx.fillText('PASS RATE', 700, 445);
   ctx.restore();
 
@@ -434,17 +434,17 @@ function createSectionAccuracyChart(
 
     ctx.save();
     ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 24px Inter, sans-serif';
+    ctx.font = 'bold 24px Century Gothic';
     ctx.textAlign = 'center';
     ctx.fillText(`${sec.accuracy}%`, bx + barWidth / 2 + depth / 2, by - depth - 16);
 
     ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 18px Inter, sans-serif';
+    ctx.font = 'bold 18px Century Gothic';
     const label = sec.name.length > 18 ? sec.name.substring(0, 16) + '...' : sec.name;
     ctx.fillText(label, bx + barWidth / 2, floorY + 40);
 
     ctx.fillStyle = '#64748b';
-    ctx.font = '14px Inter, sans-serif';
+    ctx.font = '14px Century Gothic';
     ctx.fillText(`${sec.questionsCount} Qs (${sec.maxMarks}M)`, bx + barWidth / 2, floorY + 65);
     ctx.restore();
   });
@@ -510,16 +510,16 @@ function createQuestionWisePerformanceChart(
 
     ctx.save();
     ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 16px Inter, sans-serif';
+    ctx.font = 'bold 16px Century Gothic';
     ctx.textAlign = 'center';
     ctx.fillText(`${q.accuracy}%`, bx + barWidth / 2 + depth / 2, by - depth - 10);
 
     ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 17px Inter, sans-serif';
+    ctx.font = 'bold 17px Century Gothic';
     ctx.fillText(`Q${q.qNumber}`, bx + barWidth / 2, floorY + 32);
 
     ctx.fillStyle = '#64748b';
-    ctx.font = '12px Inter, sans-serif';
+    ctx.font = '12px Century Gothic';
     const secShort = q.section.length > 8 ? q.section.substring(0, 7) + '.' : q.section;
     ctx.fillText(secShort, bx + barWidth / 2, floorY + 54);
     ctx.restore();
@@ -587,17 +587,17 @@ function createDepartmentPerformanceChart(
 
     ctx.save();
     ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 24px Inter, sans-serif';
+    ctx.font = 'bold 24px Century Gothic';
     ctx.textAlign = 'center';
     ctx.fillText(`${d.avgScore}%`, bx + barWidth / 2 + depth / 2, by - depth - 16);
 
     ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 18px Inter, sans-serif';
+    ctx.font = 'bold 18px Century Gothic';
     const label = d.department.length > 18 ? d.department.substring(0, 16) + '...' : d.department;
     ctx.fillText(label, bx + barWidth / 2, floorY + 40);
 
     ctx.fillStyle = '#64748b';
-    ctx.font = '14px Inter, sans-serif';
+    ctx.font = '14px Century Gothic';
     ctx.fillText(`${d.count} Candidate${d.count !== 1 ? 's' : ''}`, bx + barWidth / 2, floorY + 65);
     ctx.restore();
   });
@@ -666,21 +666,21 @@ function createIntegrityChart(
 
     ctx.save();
     ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 24px Inter, sans-serif';
+    ctx.font = 'bold 24px Century Gothic';
     ctx.textAlign = 'center';
     ctx.fillText(`${b.count}`, bx + barWidth / 2 + depth / 2, by - depth - 16);
 
     const share = totalAttempted > 0 ? ((b.count / totalAttempted) * 100).toFixed(1) : '0';
     ctx.fillStyle = '#64748b';
-    ctx.font = 'bold 16px Inter, sans-serif';
+    ctx.font = 'bold 16px Century Gothic';
     ctx.fillText(`(${share}%)`, bx + barWidth / 2 + depth / 2, by - depth + 6);
 
     ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 18px Inter, sans-serif';
+    ctx.font = 'bold 18px Century Gothic';
     ctx.fillText(b.label, bx + barWidth / 2, floorY + 40);
 
     ctx.fillStyle = color;
-    ctx.font = 'bold 14px Inter, sans-serif';
+    ctx.font = 'bold 14px Century Gothic';
     ctx.fillText(`[${b.tag}]`, bx + barWidth / 2, floorY + 65);
     ctx.restore();
   });
