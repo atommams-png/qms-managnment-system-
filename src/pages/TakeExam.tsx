@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Clock, Send, CheckCircle2, RefreshCw, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '@/components/Header';
+import { detectDeviceAsync, DeviceInfo } from '@/lib/deviceDetector';
+import DeviceBadge from '@/components/DeviceBadge';
 
 const TakeExam = () => {
   const { code } = useParams<{ code: string }>();
@@ -30,9 +32,11 @@ const TakeExam = () => {
   const [autoSaveStatus, setAutoSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [isNavOpen, setIsNavOpen] = useState(true);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(true);
+  const [detectedDev, setDetectedDev] = useState<DeviceInfo | null>(null);
   const questionBtnRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const attemptRef = useRef<ExamAttempt | null>(null);
+  const deviceRef = useRef<DeviceInfo | null>(null);
   const tabSwitchesRef = useRef<number>(0);
   const questionTimesRef = useRef<Record<string, number>>({});
   const questionEnteredAtRef = useRef<number>(Date.now());
@@ -105,8 +109,19 @@ const TakeExam = () => {
         }
         setPassageMap(pMap);
 
-        // Start or resume attempt from backend
-        const att = await startAttempt(candidateId, examId);
+        // Detect student device telemetry
+        const currentDev = await detectDeviceAsync();
+        setDetectedDev(currentDev);
+        deviceRef.current = currentDev;
+
+        // Start or resume attempt from backend with device telemetry
+        const att = await startAttempt(candidateId, examId, {
+          deviceType: currentDev.deviceType,
+          deviceName: currentDev.deviceLabel,
+          deviceOs: currentDev.os,
+          isDesktopMode: currentDev.isDesktopMode,
+          deviceInfo: currentDev.deviceDetails
+        });
         if (!att) {
           toast.error('Failed to access exam. You may have already submitted this exam.');
           navigate('/');
@@ -197,6 +212,17 @@ const TakeExam = () => {
 
           tabSwitchesRef.current = next;
 
+          if (attemptRef.current?.id && !submitted && next < exam.settings.maxTabSwitches) {
+            updateAttempt({
+              id: attemptRef.current.id,
+              candidateId: candidateId || '',
+              examId: examId || '',
+              answers: answers.map(a => ({ questionId: a.questionId, selectedAnswer: a.selectedAnswer })),
+              tabSwitches: next,
+              isSubmitted: false
+            } as any).catch(() => {});
+          }
+
           if (next >= exam.settings.maxTabSwitches) {
             handleSubmit(next);
             toast.error('Exam auto-submitted due to too many tab switches');
@@ -239,8 +265,16 @@ const TakeExam = () => {
       // eslint-disable-next-line no-console
       console.debug('Submitting answersWithTime:', answersWithTime);
 
+      const currentDevice = deviceRef.current || (await detectDeviceAsync());
+
       // Only pass the specific fields needed, not the entire attempt object (which has circular refs)
-      const result = await submitAttempt(att.id, answersWithTime, finalTabSwitches);
+      const result = await submitAttempt(att.id, answersWithTime, finalTabSwitches, {
+        deviceType: currentDevice.deviceType,
+        deviceName: currentDevice.deviceLabel,
+        deviceOs: currentDevice.os,
+        isDesktopMode: currentDevice.isDesktopMode,
+        deviceInfo: currentDevice.deviceDetails
+      });
       if (!result) {
         toast.error('Failed to generate result. Please try again.');
         setSubmitted(false);
@@ -617,9 +651,35 @@ const TakeExam = () => {
                 </>
               )}
             </div>
+
+            {/* Device telemetry badge */}
+            {detectedDev && (
+              <div className="hidden md:flex">
+                <DeviceBadge
+                  deviceLabel={detectedDev.deviceLabel}
+                  deviceType={detectedDev.deviceType}
+                  deviceOs={detectedDev.os}
+                  isDesktopMode={detectedDev.isDesktopMode}
+                  deviceInfo={detectedDev.deviceDetails}
+                  size="sm"
+                />
+              </div>
+            )}
           </div>
         }
       >
+        {detectedDev && (
+          <div className="flex md:hidden mr-1">
+            <DeviceBadge
+              deviceLabel={detectedDev.deviceLabel}
+              deviceType={detectedDev.deviceType}
+              deviceOs={detectedDev.os}
+              isDesktopMode={detectedDev.isDesktopMode}
+              deviceInfo={detectedDev.deviceDetails}
+              size="sm"
+            />
+          </div>
+        )}
         {tabSwitches > 0 && (
           <Badge variant="destructive" className="text-xs hidden sm:flex">
             <AlertTriangle className="mr-1 h-3 w-3" /> {tabSwitches}

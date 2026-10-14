@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getAdminSession, getExam, addQuestion, updateQuestion, deleteQuestion, getCandidates, getResults, getAttempts, exportResultsCSV } from '@/lib/store';
+import { getAdminSession, getExam, getExams, getExamByCode, addQuestion, updateQuestion, deleteQuestion, getCandidates, getResults, getAttempts, exportResultsCSV } from '@/lib/store';
 import { Exam, ExamResult, Candidate, ExamAttempt } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,15 +8,17 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, Trash2, Download, Copy, Edit, Settings, Upload, FileText, Eye, CheckCircle2, XCircle, MinusCircle, HelpCircle, Sparkles, LayoutGrid, Table as TableIcon, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, BarChart3, FileQuestion } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Download, Copy, Edit, Settings, Upload, FileText, Eye, CheckCircle2, XCircle, MinusCircle, HelpCircle, Sparkles, LayoutGrid, Table as TableIcon, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, BarChart3, FileQuestion, RefreshCw, Activity, Search, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { ImageUploadInput } from '@/components/ImageUploadInput';
 import { exportExamResultsToExcel, previewQuestionsFromExcel, downloadQuestionsTemplate } from '@/lib/excelUtils';
-import { exportExamDetailedPdfReport } from '@/lib/pdfUtils';
+import { exportExamDetailedPdfReport, ComparisonExamData } from '@/lib/pdfUtils';
 import { formatExamScheduleDateTime } from '@/lib/dateUtils';
 import Header from '@/components/Header';
 import { ExamResults3DAnalytics } from '@/components/ExamResults3DAnalytics';
+import DeviceBadge from '@/components/DeviceBadge';
+import LiveExamMonitor from '@/components/LiveExamMonitor';
 
 const ExamManage = () => {
   const { id } = useParams<{ id: string }>();
@@ -54,6 +56,7 @@ const ExamManage = () => {
   const [filterDepartment, setFilterDepartment] = useState<string>('');
   const [filterCollege, setFilterCollege] = useState<string>('');
   const [filterSection, setFilterSection] = useState<string>('');
+  const [filterDevice, setFilterDevice] = useState<string>('');
   const [filterSearch, setFilterSearch] = useState<string>('');
   const [showFilters, setShowFilters] = useState<boolean>(false);
   const [resultsViewMode, setResultsViewMode] = useState<'table' | 'card' | 'graph'>('table');
@@ -63,11 +66,24 @@ const ExamManage = () => {
 
   // Export dialog states
   const [showExportDialog, setShowExportDialog] = useState<boolean>(false);
+  const [showPdfExportDialog, setShowPdfExportDialog] = useState<boolean>(false);
+  const [pdfIncludeResults, setPdfIncludeResults] = useState<'withResults' | 'withoutResults'>('withResults');
+  const [pdfExportAll, setPdfExportAll] = useState<boolean>(false);
   const [exportAllData, setExportAllData] = useState<boolean>(false);
   const [exportColumns, setExportColumns] = useState<Set<string>>(new Set([
-    'name', 'email', 'college', 'usn', 'department', 'section', 'attempted',
+    'name', 'email', 'phone', 'college', 'usn', 'department', 'section', 'attempted',
     'tabSwitches', 'sectionWise', 'questionWise', 'correct', 'wrong', 'score', 'percentage'
   ]));
+
+  // Comparative analysis states for PDF report
+  const [allOtherExams, setAllOtherExams] = useState<Exam[]>([]);
+  const [enableComparison, setEnableComparison] = useState<boolean>(false);
+  const [comparisonExamCode, setComparisonExamCode] = useState<string>('');
+  const [comparisonExamData, setComparisonExamData] = useState<ComparisonExamData | null>(null);
+  const [isLoadingComparison, setIsLoadingComparison] = useState<boolean>(false);
+  const [comparisonError, setComparisonError] = useState<string>('');
+
+  const liveActiveCount = attempts.filter(a => !a.isSubmitted).length;
 
   const questionFileRef = useRef<HTMLInputElement>(null);
   const imageUploadSectionRef = useRef<HTMLDivElement>(null);
@@ -86,11 +102,64 @@ const ExamManage = () => {
     }
   }, []);
 
-  const refresh = async () => {
-    setIsLoading(true);
+  useEffect(() => {
+    if (showPdfExportDialog && id) {
+      getExams().then((all) => {
+        setAllOtherExams(all.filter((e) => e.id !== id));
+      }).catch(() => {});
+    }
+  }, [showPdfExportDialog, id]);
+
+  const handleLoadComparisonExam = async (codeToLookup?: string) => {
+    const code = (codeToLookup ?? comparisonExamCode).trim();
+    if (!code) {
+      setComparisonError('Please enter an exam code');
+      return;
+    }
+
+    setIsLoadingComparison(true);
+    setComparisonError('');
+    try {
+      const otherExam = await getExamByCode(code.toUpperCase());
+      if (!otherExam) {
+        setComparisonError(`No exam found with code "${code.toUpperCase()}"`);
+        setComparisonExamData(null);
+        return;
+      }
+
+      if (otherExam.id === id) {
+        setComparisonError('Cannot compare an exam with itself. Please select another exam.');
+        setComparisonExamData(null);
+        return;
+      }
+
+      const [otherCandidates, otherResults, otherAttempts] = await Promise.all([
+        getCandidates(otherExam.id),
+        getResults(otherExam.id),
+        getAttempts(otherExam.id),
+      ]);
+
+      setComparisonExamData({
+        exam: otherExam,
+        candidates: otherCandidates,
+        results: otherResults,
+        attempts: otherAttempts,
+      });
+      setComparisonExamCode(otherExam.code);
+      toast.success(`Exam loaded for comparison: ${otherExam.name} (${otherExam.code})`);
+    } catch (err) {
+      console.error('Failed to load comparison exam:', err);
+      setComparisonError('Failed to load comparison exam details');
+    } finally {
+      setIsLoadingComparison(false);
+    }
+  };
+
+  const refresh = async (silent: boolean = false) => {
+    if (!silent) setIsLoading(true);
     if (!id) {
       setExam(null);
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
       return;
     }
     try {
@@ -123,11 +192,13 @@ const ExamManage = () => {
       setAttempts(exAttempts);
     } catch (error) {
       console.error('Failed to load exam details:', error);
-      setExam(null);
-      setResults([]);
-      setCandidates([]);
+      if (!silent) {
+        setExam(null);
+        setResults([]);
+        setCandidates([]);
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -286,11 +357,50 @@ const ExamManage = () => {
       // Filter by section
       if (filterSection && candidate.section !== filterSection) return false;
 
-      // Filter by search (name and email)
-      if (filterSearch) {
-        const searchTerm = filterSearch.toLowerCase();
-        if (!candidate.name.toLowerCase().includes(searchTerm) &&
-          !candidate.email.toLowerCase().includes(searchTerm)) {
+      // Filter by device
+      if (filterDevice) {
+        const devLabel = (attempt?.deviceName || candidate.deviceName || candidate.deviceType || '').toLowerCase();
+        const isDesktopMode = Boolean(attempt?.isDesktopMode ?? candidate.isDesktopMode);
+        const devType = (attempt?.deviceType || candidate.deviceType || '').toLowerCase();
+
+        if (filterDevice === 'mobile') {
+          if (!devLabel.includes('android') && !devLabel.includes('iphone') && !devLabel.includes('mobile') && devType !== 'mobile') return false;
+        } else if (filterDevice === 'desktop') {
+          if (isDesktopMode || devLabel.includes('mobile') || devLabel.includes('android') || devLabel.includes('iphone') || devType === 'mobile') return false;
+        } else if (filterDevice === 'android_desktop_mode') {
+          if (!devLabel.includes('android') || !isDesktopMode) return false;
+        } else if (filterDevice === 'iphone_desktop_mode') {
+          if (!devLabel.includes('iphone') || !isDesktopMode) return false;
+        } else if (filterDevice === 'android_mobile') {
+          if (!devLabel.includes('android') || isDesktopMode) return false;
+        } else if (filterDevice === 'iphone_mobile') {
+          if (!devLabel.includes('iphone') || isDesktopMode) return false;
+        } else if (filterDevice === 'tablet') {
+          if (!devLabel.includes('ipad') && !devLabel.includes('tablet') && devType !== 'tablet') return false;
+        }
+      }
+
+      // Filter by search (name, email, usn, phone, college, department, section)
+      if (filterSearch.trim()) {
+        const searchTerm = filterSearch.toLowerCase().trim();
+        const name = (candidate.name || '').toLowerCase();
+        const email = (candidate.email || '').toLowerCase();
+        const usn = (candidate.usn || '').toLowerCase();
+        const phone = (candidate.phone || '').toLowerCase();
+        const college = (candidate.college || '').toLowerCase();
+        const department = (candidate.department || '').toLowerCase();
+        const section = (candidate.section || '').toLowerCase();
+
+        const matches =
+          name.includes(searchTerm) ||
+          email.includes(searchTerm) ||
+          usn.includes(searchTerm) ||
+          phone.includes(searchTerm) ||
+          college.includes(searchTerm) ||
+          department.includes(searchTerm) ||
+          section.includes(searchTerm);
+
+        if (!matches) {
           return false;
         }
       }
@@ -315,6 +425,7 @@ const ExamManage = () => {
     setFilterDepartment('');
     setFilterCollege('');
     setFilterSection('');
+    setFilterDevice('');
     setFilterSearch('');
   };
 
@@ -489,11 +600,11 @@ const ExamManage = () => {
     setShowExportDialog(false);
   };
 
-  const handleExportPdf = async (customFiltered?: boolean) => {
+  const handleExportPdf = async (includeResults: boolean = true, customFiltered?: boolean) => {
     if (!id || !exam) return;
     const attempts = getAttemptsList();
 
-    const isFiltered = customFiltered !== undefined ? customFiltered : (!exportAllData && showFilters);
+    const isFiltered = customFiltered !== undefined ? customFiltered : (!pdfExportAll && showFilters);
     const candidatesToExport = isFiltered ? getFilteredCandidates() : candidates;
 
     if (candidatesToExport.length === 0) {
@@ -501,13 +612,21 @@ const ExamManage = () => {
       return;
     }
 
-    const toastId = toast.loading('Generating comprehensive exam PDF report...');
+    if (enableComparison && !comparisonExamData) {
+      toast.error('Please verify and load the comparison exam first, or disable the comparison option');
+      return;
+    }
+
+    const toastId = toast.loading(`Generating ATOM ${includeResults ? 'Complete' : 'Summary'} PDF report${enableComparison && comparisonExamData ? ' with Comparative Analysis' : ''}...`);
     try {
       await exportExamDetailedPdfReport(exam, candidates, results, attempts, {
         filteredCandidates: candidatesToExport,
         isFiltered,
+        includeResults,
+        comparisonExamData: enableComparison && comparisonExamData ? comparisonExamData : undefined,
       });
-      toast.success('Complete PDF Report downloaded successfully!', { id: toastId });
+      toast.success(`PDF Report downloaded successfully!`, { id: toastId });
+      setShowPdfExportDialog(false);
       setShowExportDialog(false);
     } catch (err) {
       console.error('PDF Export Error:', err);
@@ -654,7 +773,7 @@ const ExamManage = () => {
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <TabsList className="bg-emerald-50/90 border-2 border-emerald-200 p-1.5 rounded-xl h-auto flex gap-2 shadow-sm">
+            <TabsList className="bg-emerald-50/90 border-2 border-emerald-200 p-1.5 rounded-xl h-auto flex flex-wrap gap-2 shadow-sm">
               <TabsTrigger
                 value="questions"
                 className="px-5 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-emerald-950 data-[state=inactive]:hover:bg-emerald-100/80 cursor-pointer"
@@ -671,6 +790,19 @@ const ExamManage = () => {
                 <span>Results Sheet</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold transition-colors ${activeTab === 'participants' ? 'bg-white/25 text-white shadow-sm' : 'bg-emerald-200 text-emerald-900'}`}>
                   {Math.max(candidates.length, results.length)}
+                </span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="monitor"
+                className="px-5 py-2.5 text-sm font-bold rounded-lg transition-all flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md data-[state=inactive]:text-emerald-950 data-[state=inactive]:hover:bg-emerald-100/80 cursor-pointer"
+              >
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                </span>
+                <span>Live Monitor</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold transition-colors ${activeTab === 'monitor' ? 'bg-white/25 text-white shadow-sm' : 'bg-emerald-200 text-emerald-900'}`}>
+                  {liveActiveCount > 0 ? `${liveActiveCount} Live` : `${attempts.length} Total`}
                 </span>
               </TabsTrigger>
             </TabsList>
@@ -701,8 +833,12 @@ const ExamManage = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => setShowFilters(!showFilters)}
+                  className="relative"
                 >
                   {showFilters ? 'Hide' : 'Show'} Filters
+                  {(filterDepartment || filterCollege || filterSection || filterDevice || filterAttempted !== 'all' || filterPercentageMin > 0 || filterPercentageMax < 100) && (
+                    <span className="ml-1.5 h-2 w-2 rounded-full bg-emerald-600 inline-block" />
+                  )}
                 </Button>
                 <Button
                   size="sm"
@@ -714,11 +850,23 @@ const ExamManage = () => {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => handleExportPdf(false)}
+                  onClick={() => setShowPdfExportDialog(true)}
                   disabled={candidates.length === 0}
                   className="bg-[#008037] text-white hover:bg-black shadow-sm font-bold flex items-center gap-1.5"
                 >
                   <FileText className="h-4 w-4" /> Export PDF Report
+                </Button>
+              </div>
+            )}
+
+            {activeTab === 'monitor' && (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => refresh(false)}
+                  className="bg-[#008037] text-white hover:bg-black shadow-sm font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className="h-4 w-4" /> Refresh Telemetry
                 </Button>
               </div>
             )}
@@ -1343,16 +1491,51 @@ const ExamManage = () => {
 
               return (
                 <>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900">Results Sheet</h3>
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white p-3 sm:p-3.5 rounded-2xl border-2 border-emerald-200/90 shadow-xs">
+                    <div className="shrink-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-gray-900">Results Sheet</h3>
+                        {filterSearch.trim() && (
+                          <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 text-[11px] font-bold px-2 py-0.5">
+                            {totalFiltered} Match{totalFiltered === 1 ? '' : 'es'}
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Showing {totalFiltered > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, totalFiltered)} of {totalFiltered} candidates ({candidates.length} total)
+                        Showing {totalFiltered > 0 ? (currentPage - 1) * pageSize + 1 : 0} - {Math.min(currentPage * pageSize, totalFiltered)} of {totalFiltered} {filterSearch.trim() || totalFiltered !== candidates.length ? 'filtered ' : ''}candidates ({candidates.length} total)
                       </p>
                     </div>
 
+                    {/* Prominent Student Search Input */}
+                    <div className="relative flex-1 max-w-md w-full">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-600 pointer-events-none" />
+                      <Input
+                        type="text"
+                        placeholder="Search students (name, email, USN, contact, college)..."
+                        value={filterSearch}
+                        onChange={(e) => {
+                          setFilterSearch(e.target.value);
+                          setCurrentPage(1);
+                        }}
+                        className="pl-9 pr-8 h-9 text-xs sm:text-sm bg-emerald-50/30 border border-emerald-300 focus-visible:border-emerald-600 focus-visible:ring-1 focus-visible:ring-emerald-600 rounded-xl shadow-2xs font-medium placeholder:text-gray-400"
+                      />
+                      {filterSearch && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFilterSearch('');
+                            setCurrentPage(1);
+                          }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-0.5 rounded-full cursor-pointer transition-colors"
+                          title="Clear search"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+
                     {/* View Switcher Toggle & Page Size */}
-                    <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                    <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto shrink-0">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-emerald-50/70 border border-emerald-200 px-2.5 py-1 rounded-xl">
                         <span className="font-semibold text-emerald-950">Show:</span>
                         <select
@@ -1417,16 +1600,32 @@ const ExamManage = () => {
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                           {/* Search */}
                           <div className="space-y-2">
-                            <Label className="text-sm font-medium">Search (Name/Email)</Label>
-                            <Input
-                              placeholder="Search..."
-                              value={filterSearch}
-                              onChange={(e) => {
-                                setFilterSearch(e.target.value);
-                                setCurrentPage(1);
-                              }}
-                              className="h-8 text-sm"
-                            />
+                            <Label className="text-sm font-medium">Search Students</Label>
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-emerald-600 pointer-events-none" />
+                              <Input
+                                placeholder="Search by name, USN, email, phone, college..."
+                                value={filterSearch}
+                                onChange={(e) => {
+                                  setFilterSearch(e.target.value);
+                                  setCurrentPage(1);
+                                }}
+                                className="pl-8 pr-7 h-8 text-sm"
+                              />
+                              {filterSearch && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFilterSearch('');
+                                    setCurrentPage(1);
+                                  }}
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                                  title="Clear search"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           {/* Attempt Status */}
@@ -1536,6 +1735,29 @@ const ExamManage = () => {
                             />
                           </div>
 
+                          {/* Device / Mode Filter */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Device / Platform</Label>
+                            <select
+                              aria-label="Filter by device"
+                              value={filterDevice}
+                              onChange={(e) => {
+                                setFilterDevice(e.target.value);
+                                setCurrentPage(1);
+                              }}
+                              className="h-8 w-full rounded-md border border-border bg-white px-2 text-sm"
+                            >
+                              <option value="">All Devices</option>
+                              <option value="desktop">💻 Laptop / Desktop</option>
+                              <option value="android_desktop_mode">⚡ Android (Desktop Mode)</option>
+                              <option value="android_mobile">📱 Android (Mobile Mode)</option>
+                              <option value="iphone_desktop_mode">⚡ iPhone (Desktop Mode)</option>
+                              <option value="iphone_mobile">🍎 iPhone (Mobile Mode)</option>
+                              <option value="tablet">📱 Tablet / iPad</option>
+                              <option value="mobile">📱 All Mobile / Tablets</option>
+                            </select>
+                          </div>
+
                           {/* Reset Button */}
                           <div className="flex items-end">
                             <Button
@@ -1559,11 +1781,42 @@ const ExamManage = () => {
                     <Card><CardContent className="py-12 text-center text-muted-foreground">No participants yet</CardContent></Card>
                   ) : totalFiltered === 0 ? (
                     <Card className="shadow-sm border-dashed">
-                      <CardContent className="py-12 text-center">
-                        <p className="text-muted-foreground font-medium">No candidates match the current filter criteria.</p>
-                        <Button variant="outline" size="sm" onClick={() => { resetFilters(); setCurrentPage(1); }} className="mt-3">
-                          Reset Filters
-                        </Button>
+                      <CardContent className="py-12 text-center space-y-3">
+                        <div className="mx-auto w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-700">
+                          <Search className="h-6 w-6" />
+                        </div>
+                        <p className="text-gray-900 font-semibold">
+                          {filterSearch ? `No candidates found matching "${filterSearch}"` : 'No candidates match the current filter criteria.'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Try searching by another student name, USN, email, phone number, college, or reset filters.
+                        </p>
+                        <div className="flex items-center justify-center gap-2 pt-2">
+                          {filterSearch && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setFilterSearch('');
+                                setCurrentPage(1);
+                              }}
+                              className="text-xs font-semibold cursor-pointer"
+                            >
+                              Clear Search
+                            </Button>
+                          )}
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              resetFilters();
+                              setCurrentPage(1);
+                            }}
+                            className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                          >
+                            Reset All Filters
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
                   ) : resultsViewMode === 'table' ? (
@@ -1577,9 +1830,12 @@ const ExamManage = () => {
                                 <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">Sl No</th>
                                 <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">Name</th>
                                 <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">Email</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">Contact</th>
                                 <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">College</th>
                                 <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">USN</th>
                                 <th className="px-4 py-3.5 font-bold text-emerald-950 text-left whitespace-nowrap">Dept</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap">Section</th>
+                                <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap">Device / Mode</th>
                                 <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap">Attempted</th>
                                 <th className="px-4 py-3.5 font-bold text-emerald-950 text-center whitespace-nowrap">Tab Switches</th>
                                 <th className="px-4 py-3.5 font-bold text-emerald-950 text-left min-w-[200px]">Section-wise</th>
@@ -1603,10 +1859,21 @@ const ExamManage = () => {
                                     <td className="px-4 py-3.5 font-bold text-emerald-800 text-center whitespace-nowrap">{actualIdx + 1}</td>
                                     <td className="px-4 py-3.5 font-semibold text-gray-900 whitespace-nowrap">{c.name}</td>
                                     <td className="px-4 py-3.5 text-gray-700 max-w-[200px] truncate" title={c.email}>{c.email}</td>
+                                    <td className="px-4 py-3.5 text-gray-700 whitespace-nowrap font-mono text-xs">{c.phone || '-'}</td>
                                     <td className="px-4 py-3.5 text-gray-700 max-w-[160px] truncate" title={c.college}>{c.college}</td>
                                     <td className="px-4 py-3.5 text-gray-700 font-mono text-xs whitespace-nowrap">{c.usn}</td>
                                     <td className="px-4 py-3.5 text-gray-700 whitespace-nowrap">{c.department}</td>
-                                    <td className="px-4 py-3.5 text-gray-700 whitespace-nowrap text-center">{c.section}</td>
+                                    <td className="px-4 py-3.5 text-gray-700 whitespace-nowrap text-center">{c.section || '-'}</td>
+                                    <td className="px-4 py-3.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                      <DeviceBadge
+                                        deviceLabel={attempt?.deviceName || c.deviceName}
+                                        deviceType={attempt?.deviceType || c.deviceType}
+                                        deviceOs={attempt?.deviceOs || c.deviceOs}
+                                        isDesktopMode={attempt?.isDesktopMode ?? c.isDesktopMode}
+                                        deviceInfo={attempt?.deviceInfo || c.deviceInfo}
+                                        size="sm"
+                                      />
+                                    </td>
                                     <td className="px-4 py-3.5 text-gray-700 text-center whitespace-nowrap">{attempt ? attempt.answers.length : 'N/A'}</td>
                                     <td className="px-4 py-3.5 text-gray-700 text-center whitespace-nowrap">
                                       <span className={attempt && attempt.tabSwitches > 0 ? "font-bold text-amber-700" : ""}>
@@ -1714,13 +1981,23 @@ const ExamManage = () => {
                                   {c.name}
                                 </h4>
                               </div>
-                              <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold text-center shrink-0 shadow-2xs ${status === 'Limit Exceeded'
-                                  ? 'bg-destructive text-white'
-                                  : !attempt
-                                    ? 'bg-gray-200 text-gray-700'
-                                    : 'bg-[#0a7a3b] text-white'
-                                }`}>
-                                {status}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <DeviceBadge
+                                  deviceLabel={attempt?.deviceName || c.deviceName}
+                                  deviceType={attempt?.deviceType || c.deviceType}
+                                  deviceOs={attempt?.deviceOs || c.deviceOs}
+                                  isDesktopMode={attempt?.isDesktopMode ?? c.isDesktopMode}
+                                  deviceInfo={attempt?.deviceInfo || c.deviceInfo}
+                                  size="sm"
+                                />
+                                <div className={`px-2 py-0.5 rounded-full text-[10px] font-bold text-center shrink-0 shadow-2xs ${status === 'Limit Exceeded'
+                                    ? 'bg-destructive text-white'
+                                    : !attempt
+                                      ? 'bg-gray-200 text-gray-700'
+                                      : 'bg-[#0a7a3b] text-white'
+                                  }`}>
+                                  {status}
+                                </div>
                               </div>
                             </div>
 
@@ -1759,10 +2036,14 @@ const ExamManage = () => {
                             </div>
 
                             {/* Line 3: Candidate Details */}
-                            <div className="grid grid-cols-2 gap-1.5 text-xs">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-xs">
                               <div className="min-w-0">
                                 <span className="text-[10px] font-semibold text-green-700 block">Email</span>
                                 <span className="text-xs text-gray-700 truncate block" title={c.email}>{c.email}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-semibold text-green-700 block">Contact</span>
+                                <span className="text-xs text-gray-700 font-mono truncate block" title={c.phone || '-'}>{c.phone || '-'}</span>
                               </div>
                               <div className="min-w-0">
                                 <span className="text-[10px] font-semibold text-green-700 block">College</span>
@@ -1933,6 +2214,17 @@ const ExamManage = () => {
               );
             })()}
           </TabsContent>
+
+          <TabsContent value="monitor" className="space-y-6">
+            <LiveExamMonitor
+              exam={exam}
+              candidates={candidates}
+              attempts={attempts}
+              results={results}
+              onRefresh={() => refresh(true)}
+              isRefreshing={isLoading}
+            />
+          </TabsContent>
         </Tabs>
 
         {/* Export Dialog */}
@@ -2002,33 +2294,318 @@ const ExamManage = () => {
                   </div>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex flex-wrap gap-2 justify-end pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowExportDialog(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={() => handleExportPdf(!exportAllData)}
-                    className="bg-[#008037] text-white hover:bg-black font-bold gap-2"
-                  >
-                    <FileText className="h-4 w-4" />
-                    Export PDF Report
-                  </Button>
-                  <Button
-                    className="gap-2 bg-primary text-white hover:bg-primary/90 font-bold"
-                    onClick={handleExport}
-                  >
-                    <Download className="h-4 w-4" />
-                    Export Excel
-                  </Button>
+                  {/* Action Buttons */}
+                  <div className="flex flex-wrap gap-2 justify-end pt-4 border-t">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowExportDialog(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setShowExportDialog(false);
+                        setShowPdfExportDialog(true);
+                      }}
+                      className="bg-[#008037] text-white hover:bg-black font-bold gap-2"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Export PDF Report
+                    </Button>
+                    <Button
+                      className="gap-2 bg-primary text-white hover:bg-primary/90 font-bold"
+                      onClick={handleExport}
+                    >
+                      <Download className="h-4 w-4" />
+                      Export Excel
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+        {/* PDF Export Dialog Modal */}
+        <Dialog open={showPdfExportDialog} onOpenChange={setShowPdfExportDialog}>
+          <DialogContent className="max-w-3xl md:max-w-4xl w-[94vw] md:w-[860px] max-h-[90vh] flex flex-col p-0 overflow-hidden bg-white shadow-2xl rounded-2xl border border-gray-200">
+            <DialogHeader className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100 p-5 px-6 border-b border-emerald-200 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-[#008037] text-white rounded-xl shadow-sm">
+                  <FileText className="h-6 w-6" />
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                <div>
+                  <DialogTitle className="text-lg font-bold text-emerald-950">
+                    Export Assessment Report (PDF)
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-emerald-800 mt-0.5">
+                    Generate ATOM comprehensive multi-page performance report with branded theme, analytics & charts
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Left Column: Report Options & Candidate Scope */}
+                <div className="space-y-5 flex flex-col justify-between">
+                  {/* Report Type & Result Visibility */}
+                  <div className="space-y-3">
+                    <Label className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#008037]"></span>
+                      Report Type & Visibility
+                    </Label>
+                    
+                    <div className="space-y-2.5">
+                      <label
+                        className={`flex items-start gap-3 p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                          pdfIncludeResults === 'withResults'
+                            ? 'border-[#008037] bg-emerald-50/70 shadow-sm ring-1 ring-emerald-400/30'
+                            : 'border-gray-200 hover:border-emerald-200 bg-white'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="pdfResultsMode"
+                          value="withResults"
+                          checked={pdfIncludeResults === 'withResults'}
+                          onChange={() => setPdfIncludeResults('withResults')}
+                          className="mt-1 accent-[#008037]"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs sm:text-sm text-gray-900">With Complete Result</span>
+                            <Badge className="bg-[#008037] text-white text-[10px] px-2 py-0.5 font-bold">Recommended</Badge>
+                          </div>
+                          <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                            Includes Executive KPI Summary, 7-bucket Histogram, Performance Donut, Top 10 Leaderboard (with Contact/Phone), Time & Question Analytics, and the <strong>Complete Candidate Results Sheet</strong>.
+                          </p>
+                        </div>
+                      </label>
+
+                      <label
+                        className={`flex items-start gap-3 p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                          pdfIncludeResults === 'withoutResults'
+                            ? 'border-[#008037] bg-emerald-50/70 shadow-sm ring-1 ring-emerald-400/30'
+                            : 'border-gray-200 hover:border-emerald-200 bg-white'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="pdfResultsMode"
+                          value="withoutResults"
+                          checked={pdfIncludeResults === 'withoutResults'}
+                          onChange={() => setPdfIncludeResults('withoutResults')}
+                          className="mt-1 accent-[#008037]"
+                        />
+                        <div className="flex-1">
+                          <span className="font-bold text-xs sm:text-sm text-gray-900">Without Result (Analytics Only)</span>
+                          <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                            Includes Executive Summary, Score Distribution, Section Breakdown, Time Analytics, and Question Difficulty without candidate master results scorecard.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Candidate Scope Selection */}
+                  <div className="space-y-2.5 pt-3 border-t border-gray-100">
+                    <Label className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                      Candidate Scope
+                    </Label>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <label
+                        className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                          !pdfExportAll
+                            ? 'border-[#008037] bg-emerald-50 font-bold text-emerald-950 ring-1 ring-emerald-400'
+                            : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="pdfExportScope"
+                          checked={!pdfExportAll}
+                          onChange={() => setPdfExportAll(false)}
+                          className="accent-[#008037]"
+                        />
+                        <span className="truncate">Filtered ({getFilteredCandidates().length})</span>
+                      </label>
+
+                      <label
+                        className={`flex items-center gap-2 p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                          pdfExportAll
+                            ? 'border-[#008037] bg-emerald-50 font-bold text-emerald-950 ring-1 ring-emerald-400'
+                            : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="pdfExportScope"
+                          checked={pdfExportAll}
+                          onChange={() => setPdfExportAll(true)}
+                          className="accent-[#008037]"
+                        />
+                        <span className="truncate">All ({candidates.length})</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Comparative Analysis */}
+                <div className="space-y-4 bg-slate-50/90 rounded-xl p-4 border border-gray-200 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-gray-200">
+                      <div className="flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4 text-[#008037]" />
+                        <Label htmlFor="enableComparisonToggle" className="text-xs font-bold text-gray-900 cursor-pointer uppercase tracking-wider">
+                          Cross-Exam Comparative Analysis
+                        </Label>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          id="enableComparisonToggle"
+                          type="checkbox"
+                          checked={enableComparison}
+                          onChange={(e) => {
+                            setEnableComparison(e.target.checked);
+                            if (!e.target.checked) {
+                              setComparisonError('');
+                            }
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-gray-300 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#008037]"></div>
+                      </label>
+                    </div>
+
+                    <p className="text-[11px] text-gray-600 leading-relaxed">
+                      Compare this exam side-by-side with another exam. The PDF report will append benchmark delta tables, 3D comparative visual charts, and student tracking at the end of the report.
+                    </p>
+
+                    {enableComparison ? (
+                      <div className="space-y-3 pt-1 animate-fade-in">
+                        {/* Quick Select Dropdown */}
+                        {allOtherExams.length > 0 && (
+                          <div className="space-y-1">
+                            <span className="text-[11px] font-semibold text-gray-700 block">Select from existing exams:</span>
+                            <select
+                              className="w-full text-xs rounded-lg border border-gray-300 bg-white p-2 text-gray-900 focus:border-[#008037] focus:outline-hidden shadow-xs"
+                              value={comparisonExamData?.exam?.code || ''}
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  setComparisonExamCode(e.target.value);
+                                  handleLoadComparisonExam(e.target.value);
+                                }
+                              }}
+                            >
+                              <option value="">-- Select an Exam to Compare --</option>
+                              {allOtherExams.map((oe) => (
+                                <option key={oe.id} value={oe.code}>
+                                  {oe.name} (Code: {oe.code})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+
+                        {/* Or Manual Code Input */}
+                        <div className="space-y-1">
+                          <span className="text-[11px] font-semibold text-gray-700 block">Or enter another Exam Code:</span>
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="e.g. XK93A"
+                              value={comparisonExamCode}
+                              onChange={(e) => setComparisonExamCode(e.target.value.toUpperCase())}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleLoadComparisonExam();
+                                }
+                              }}
+                              className="font-mono uppercase text-xs h-9 bg-white"
+                            />
+                            <Button
+                              size="sm"
+                              type="button"
+                              onClick={() => handleLoadComparisonExam()}
+                              disabled={isLoadingComparison || !comparisonExamCode.trim()}
+                              className="bg-[#008037] hover:bg-black text-white text-xs font-bold shrink-0 h-9 px-3"
+                            >
+                              {isLoadingComparison ? 'Loading...' : 'Verify Code'}
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Error message */}
+                        {comparisonError && (
+                          <p className="text-xs font-semibold text-rose-600 flex items-center gap-1 bg-rose-50 p-2 rounded-md border border-rose-200">
+                            <XCircle className="h-3.5 w-3.5 shrink-0" /> {comparisonError}
+                          </p>
+                        )}
+
+                        {/* Loaded Exam Preview Card */}
+                        {comparisonExamData && (
+                          <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-3 flex items-start justify-between gap-2 shadow-xs">
+                            <div className="space-y-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-xs text-emerald-950 truncate">
+                                  {comparisonExamData.exam.name}
+                                </span>
+                                <Badge className="bg-[#008037] text-white text-[10px] font-mono px-1.5 py-0">
+                                  {comparisonExamData.exam.code}
+                                </Badge>
+                              </div>
+                              <p className="text-[11px] text-emerald-800">
+                                {comparisonExamData.candidates.length} Registered • {
+                                  comparisonExamData.attempts.filter(a => a.isSubmitted || (a.answers && a.answers.length > 0)).length
+                                } Appeared • {comparisonExamData.exam.questions?.length || 0} Questions
+                              </p>
+                            </div>
+                            <CheckCircle2 className="h-5 w-5 text-[#008037] shrink-0 mt-0.5" />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-white/80 rounded-lg border border-dashed border-gray-300 text-center text-xs text-gray-500 py-6">
+                        <span>Comparative analysis is turned off. Toggle above to benchmark side-by-side against a 2nd exam.</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 p-4 px-6 border-t border-gray-200 flex items-center justify-between shrink-0">
+              <div className="text-xs text-gray-600 hidden sm:block">
+                <span className="font-semibold text-gray-900">{pdfIncludeResults === 'withResults' ? 'Full Report' : 'Summary Report'}</span>
+                {' • '}
+                <span>{pdfExportAll ? `${candidates.length} Candidates` : `${getFilteredCandidates().length} Filtered`}</span>
+                {enableComparison && comparisonExamData && (
+                  <>
+                    {' • '}
+                    <span className="text-[#008037] font-semibold">vs {comparisonExamData.exam.code}</span>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2.5 ml-auto">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPdfExportDialog(false)}
+                  className="text-xs h-9 px-4"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => handleExportPdf(pdfIncludeResults === 'withResults', !pdfExportAll)}
+                  className="bg-[#008037] hover:bg-black text-white font-bold text-xs shadow-sm gap-1.5 px-5 h-9"
+                >
+                  <FileText className="h-4 w-4" /> Download PDF Report
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Candidate Question-Wise Breakdown Dialog */}
         <Dialog open={!!selectedCandidateForQAnalysis} onOpenChange={(open) => !open && setSelectedCandidateForQAnalysis(null)}>
@@ -2091,6 +2668,14 @@ const ExamManage = () => {
                           : 0
                       }
                     </span>
+                    <DeviceBadge
+                      deviceLabel={selectedCandidateForQAnalysis.attempt?.deviceName || selectedCandidateForQAnalysis.candidate.deviceName}
+                      deviceType={selectedCandidateForQAnalysis.attempt?.deviceType || selectedCandidateForQAnalysis.candidate.deviceType}
+                      deviceOs={selectedCandidateForQAnalysis.attempt?.deviceOs || selectedCandidateForQAnalysis.candidate.deviceOs}
+                      isDesktopMode={selectedCandidateForQAnalysis.attempt?.isDesktopMode ?? selectedCandidateForQAnalysis.candidate.isDesktopMode}
+                      deviceInfo={selectedCandidateForQAnalysis.attempt?.deviceInfo || selectedCandidateForQAnalysis.candidate.deviceInfo}
+                      size="sm"
+                    />
                     {selectedCandidateForQAnalysis.attempt && (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-100 text-amber-900 font-medium ml-auto">
                         Tab Switches: {selectedCandidateForQAnalysis.attempt.tabSwitches}

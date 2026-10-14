@@ -8,30 +8,45 @@ import { generateUUID } from '../utils.js';
 
 const router = express.Router();
 
-let sectionColumnEnsured = false;
+let columnsEnsured = false;
 
-async function ensureCandidateSectionColumn() {
-  if (sectionColumnEnsured) return;
+async function ensureCandidateColumns() {
+  if (columnsEnsured) return;
 
-  const [rows] = await pool.execute(
-    `SELECT 1
-     FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'candidates'
-       AND COLUMN_NAME = 'section'
-     LIMIT 1`
-  );
+  try {
+    const [rows] = await pool.execute(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'candidates'`
+    );
 
-  if (rows.length === 0) {
-    await pool.execute(`
-      ALTER TABLE candidates
-      ADD COLUMN section VARCHAR(50)
-      COMMENT 'Section/Division (e.g., A, B)'
-      AFTER department
-    `);
+    const existingColumns = rows.map(r => r.COLUMN_NAME);
+
+    if (!existingColumns.includes('section')) {
+      await pool.execute(`
+        ALTER TABLE candidates
+        ADD COLUMN section VARCHAR(50)
+        COMMENT 'Section/Division (e.g., A, B)'
+        AFTER department
+      `);
+    }
+
+    if (!existingColumns.includes('device_type')) {
+      await pool.execute(`
+        ALTER TABLE candidates
+        ADD COLUMN device_type VARCHAR(50) DEFAULT NULL COMMENT 'mobile, desktop, tablet' AFTER section,
+        ADD COLUMN device_name VARCHAR(100) DEFAULT NULL COMMENT 'Detected Device Label' AFTER device_type,
+        ADD COLUMN device_os VARCHAR(50) DEFAULT NULL COMMENT 'Android, iOS, Windows, macOS, Linux' AFTER device_name,
+        ADD COLUMN is_desktop_mode BOOLEAN NOT NULL DEFAULT 0 COMMENT 'Whether student enabled desktop version' AFTER device_os,
+        ADD COLUMN device_info JSON DEFAULT NULL COMMENT 'Hardware and browser telemetry' AFTER is_desktop_mode
+      `);
+    }
+
+    columnsEnsured = true;
+  } catch (err) {
+    console.error('Error ensuring candidate columns:', err);
   }
-
-  sectionColumnEnsured = true;
 }
 
 // ============================================================
@@ -39,7 +54,23 @@ async function ensureCandidateSectionColumn() {
 // ============================================================
 router.post('/', async (req, res) => {
   try {
-    const { examId, name, email, phone, college, usn, department, section } = req.body;
+    await ensureCandidateColumns();
+
+    const {
+      examId,
+      name,
+      email,
+      phone,
+      college,
+      usn,
+      department,
+      section,
+      deviceType,
+      deviceName,
+      deviceOs,
+      isDesktopMode,
+      deviceInfo
+    } = req.body;
 
     if (!examId || !name || !email || !usn || !department) {
       return res.status(400).json({ error: 'Required fields missing' });
@@ -56,30 +87,49 @@ router.post('/', async (req, res) => {
     }
 
     const id = generateUUID();
+    const deviceInfoJson = deviceInfo ? (typeof deviceInfo === 'string' ? deviceInfo : JSON.stringify(deviceInfo)) : null;
 
-    const insertWithSection = async () => pool.execute(
+    await pool.execute(
       `INSERT INTO candidates (
-        id, exam_id, name, email, phone, college, usn, department, section
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, examId, name, email, phone || null, college || null, usn, department, section || null]
+        id, exam_id, name, email, phone, college, usn, department, section,
+        device_type, device_name, device_os, is_desktop_mode, device_info
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        examId,
+        name,
+        email,
+        phone || null,
+        college || null,
+        usn,
+        department,
+        section || null,
+        deviceType || null,
+        deviceName || null,
+        deviceOs || null,
+        isDesktopMode ? 1 : 0,
+        deviceInfoJson
+      ]
     );
-
-    try {
-      await insertWithSection();
-    } catch (error) {
-      const isMissingSectionColumn =
-        error?.code === 'ER_BAD_FIELD_ERROR' &&
-        String(error?.sqlMessage || '').includes("Unknown column 'section'");
-
-      if (!isMissingSectionColumn) throw error;
-
-      await ensureCandidateSectionColumn();
-      await insertWithSection();
-    }
 
     res.json({
       success: true,
-      data: { id, examId, name, email, phone, college, usn, department, section },
+      data: {
+        id,
+        examId,
+        name,
+        email,
+        phone,
+        college,
+        usn,
+        department,
+        section,
+        deviceType,
+        deviceName,
+        deviceOs,
+        isDesktopMode: Boolean(isDesktopMode),
+        deviceInfo
+      },
       message: 'Candidate registered successfully'
     });
   } catch (error) {
@@ -93,6 +143,7 @@ router.post('/', async (req, res) => {
 // ============================================================
 router.get('/exam/:examId', async (req, res) => {
   try {
+    await ensureCandidateColumns();
     const { examId } = req.params;
 
     const [candidates] = await pool.execute(
@@ -115,6 +166,7 @@ router.get('/exam/:examId', async (req, res) => {
 // ============================================================
 router.get('/:id', async (req, res) => {
   try {
+    await ensureCandidateColumns();
     const { id } = req.params;
 
     const [candidates] = await pool.execute(

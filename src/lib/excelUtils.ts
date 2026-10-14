@@ -320,8 +320,10 @@ export async function exportExamResultsToExcel(
   const resultsHeaderCells = [
     'Student Name',
     'Email',
+    'Contact',
     'College',
     'USN',
+    'Device & Mode',
     'Attempted',
     'Correct',
     'Wrong',
@@ -350,11 +352,15 @@ export async function exportExamResultsToExcel(
     const tabSwitches = attempt?.tabSwitches ?? 0;
     const status = attempt ? getSubmissionStatus(attempt, exam) : 'Normal Submit';
 
+    const deviceDisplay = attempt?.deviceName || candidate?.deviceName || candidate?.deviceType || 'Laptop / Desktop';
+
     const row = resultsSheet.addRow([
       candidate?.name || 'Unknown',
       candidate?.email || '',
+      candidate?.phone || '',
       candidate?.college || '',
       candidate?.usn || '',
+      deviceDisplay,
       metrics?.attempted ?? result.totalQuestions - result.unanswered,
       metrics?.correct ?? result.correctAnswers,
       metrics?.wrong ?? result.wrongAnswers,
@@ -375,23 +381,29 @@ export async function exportExamResultsToExcel(
     }
 
     // Center align numeric/status columns
-    row.getCell(5).alignment = { horizontal: 'center' };
     row.getCell(6).alignment = { horizontal: 'center' };
     row.getCell(7).alignment = { horizontal: 'center' };
     row.getCell(8).alignment = { horizontal: 'center' };
     row.getCell(9).alignment = { horizontal: 'center' };
     row.getCell(10).alignment = { horizontal: 'center' };
     row.getCell(11).alignment = { horizontal: 'center' };
+    row.getCell(12).alignment = { horizontal: 'center' };
+    row.getCell(13).alignment = { horizontal: 'center' };
 
     if (status === 'Limit Exceeded') {
-      row.getCell(11).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0E0' } };
-      row.getCell(11).font = { color: { argb: 'FFCC0000' }, bold: true };
+      row.getCell(13).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0E0' } };
+      row.getCell(13).font = { color: { argb: 'FFCC0000' }, bold: true };
+    }
+
+    if (deviceDisplay.toLowerCase().includes('desktop mode')) {
+      row.getCell(6).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
+      row.getCell(6).font = { color: { argb: 'FF856404' }, bold: true };
     }
   });
 
   resultsSheet.columns = [
-    { width: 20 }, { width: 25 }, { width: 18 }, { width: 14 },
-    { width: 12 }, { width: 10 }, { width: 10 }, { width: 15 },
+    { width: 20 }, { width: 25 }, { width: 16 }, { width: 18 }, { width: 14 },
+    { width: 22 }, { width: 12 }, { width: 10 }, { width: 10 }, { width: 15 },
     { width: 12 }, { width: 10 }, { width: 16 }, { width: 20 },
     { width: 20 }, { width: 35 }
   ];
@@ -407,12 +419,12 @@ export async function exportExamResultsToExcel(
   };
   footerRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
   footerRow.height = 20;
-  resultsSheet.mergeCells(`A${footerRow.number}:N${footerRow.number}`);
+  resultsSheet.mergeCells(`A${footerRow.number}:O${footerRow.number}`);
 
   // ============================================================
   // SHEET 2: STUDENT QUESTIONS
   // ============================================================
-  const studentSheetColumnCount = 13 + (exam.questions.length * 2);
+    const studentSheetColumnCount = 15 + (exam.questions.length * 2);
   addBrandedSheetHeader(
     wb,
     studentQuestionsSheet,
@@ -422,7 +434,7 @@ export async function exportExamResultsToExcel(
     studentSheetColumnCount
   );
 
-  const sqHeaders = ['Name', 'Email', 'College', 'USN', 'Department', 'Section', 'Tab Switches', 'Status', 'Exam Started At', 'Completed At'];
+  const sqHeaders = ['Name', 'Email', 'Contact', 'College', 'USN', 'Department', 'Section', 'Device & Mode', 'Tab Switches', 'Status', 'Exam Started At', 'Completed At'];
   exam.questions.forEach((q, idx) => {
     sqHeaders.push(`Q${idx + 1}`);
   });
@@ -463,14 +475,17 @@ export async function exportExamResultsToExcel(
       : 0;
 
     const sectionDisplay = (candidate?.section && String(candidate.section).trim()) || '-';
+    const deviceDisplay = attempt?.deviceName || candidate?.deviceName || candidate?.deviceType || 'Laptop / Desktop';
 
     const rowData = [
       candidate?.name || 'Unknown',
       candidate?.email || '',
+      candidate?.phone || '',
       candidate?.college || '',
       candidate?.usn || '',
       candidate?.department || '',
       sectionDisplay,
+      deviceDisplay,
       String(tabSwitchCount),
       status,
       startedAt,

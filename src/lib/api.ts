@@ -76,6 +76,11 @@ function toExam(exam: any) {
 }
 
 function toCandidate(candidate: any) {
+  let parsedDeviceInfo = candidate.deviceInfo ?? candidate.device_info;
+  if (typeof parsedDeviceInfo === 'string') {
+    try { parsedDeviceInfo = JSON.parse(parsedDeviceInfo); } catch {}
+  }
+
   return {
     id: candidate.id,
     examId: candidate.examId ?? candidate.exam_id,
@@ -86,11 +91,25 @@ function toCandidate(candidate: any) {
     usn: candidate.usn,
     department: candidate.department,
     section: candidate.section,
+    deviceType: candidate.deviceType ?? candidate.device_type,
+    deviceName: candidate.deviceName ?? candidate.device_name,
+    deviceOs: candidate.deviceOs ?? candidate.device_os,
+    isDesktopMode: Boolean(candidate.isDesktopMode ?? candidate.is_desktop_mode),
+    deviceInfo: parsedDeviceInfo,
     registeredAt: candidate.registeredAt ?? candidate.registered_at
   };
 }
 
 function toAttempt(attempt: any) {
+  let parsedDeviceInfo = attempt.deviceInfo ?? attempt.device_info;
+  if (typeof parsedDeviceInfo === 'string') {
+    try { parsedDeviceInfo = JSON.parse(parsedDeviceInfo); } catch {}
+  }
+  let parsedCandDeviceInfo = attempt.candidateDeviceInfo ?? attempt.candidate_device_info;
+  if (typeof parsedCandDeviceInfo === 'string') {
+    try { parsedCandDeviceInfo = JSON.parse(parsedCandDeviceInfo); } catch {}
+  }
+
   return {
     id: attempt.id,
     candidateId: attempt.candidateId ?? attempt.candidate_id,
@@ -98,12 +117,28 @@ function toAttempt(attempt: any) {
     answers: Array.isArray(attempt.answers) ? attempt.answers : [],
     startedAt: attempt.startedAt ?? attempt.started_at,
     submittedAt: attempt.submittedAt ?? attempt.submitted_at,
+    updatedAt: attempt.updatedAt ?? attempt.updated_at ?? null,
     tabSwitches: parseInt(attempt.tabSwitches ?? attempt.tab_switches ?? 0, 10),
-    isSubmitted: Boolean(attempt.isSubmitted ?? attempt.is_submitted)
+    isSubmitted: Boolean(attempt.isSubmitted ?? attempt.is_submitted),
+    deviceType: attempt.deviceType ?? attempt.device_type ?? attempt.candidate_device_type,
+    deviceName: attempt.deviceName ?? attempt.device_name ?? attempt.candidate_device_name,
+    deviceOs: attempt.deviceOs ?? attempt.device_os ?? attempt.candidate_device_os,
+    isDesktopMode: Boolean(attempt.isDesktopMode ?? attempt.is_desktop_mode ?? attempt.candidate_is_desktop_mode),
+    deviceInfo: parsedDeviceInfo ?? parsedCandDeviceInfo,
+    candidateDeviceName: attempt.candidateDeviceName ?? attempt.candidate_device_name,
+    candidateDeviceType: attempt.candidateDeviceType ?? attempt.candidate_device_type,
+    candidateDeviceOs: attempt.candidateDeviceOs ?? attempt.candidate_device_os,
+    candidateIsDesktopMode: Boolean(attempt.candidateIsDesktopMode ?? attempt.candidate_is_desktop_mode),
+    candidateDeviceInfo: parsedCandDeviceInfo
   };
 }
 
 function toResult(result: any) {
+  let parsedDeviceInfo = result.deviceInfo ?? result.device_info;
+  if (typeof parsedDeviceInfo === 'string') {
+    try { parsedDeviceInfo = JSON.parse(parsedDeviceInfo); } catch {}
+  }
+
   return {
     attemptId: result.attemptId ?? result.attempt_id,
     candidateId: result.candidateId ?? result.candidate_id,
@@ -114,7 +149,12 @@ function toResult(result: any) {
     unanswered: result.unanswered,
     totalMarks: result.totalMarks ?? result.total_marks,
     obtainedMarks: result.obtainedMarks ?? result.obtained_marks,
-    percentage: result.percentage
+    percentage: result.percentage,
+    deviceName: result.deviceName ?? result.device_name,
+    deviceType: result.deviceType ?? result.device_type,
+    deviceOs: result.deviceOs ?? result.device_os,
+    isDesktopMode: Boolean(result.isDesktopMode ?? result.is_desktop_mode),
+    deviceInfo: parsedDeviceInfo
   };
 }
 
@@ -364,6 +404,11 @@ export async function registerCandidate(data: {
   usn: string;
   department: string;
   section?: string;
+  deviceType?: string;
+  deviceName?: string;
+  deviceOs?: string;
+  isDesktopMode?: boolean;
+  deviceInfo?: any;
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const res = await fetch(`${API_URL}/candidates`, {
@@ -421,13 +466,31 @@ export async function isDuplicateCandidate(examId: string, usn: string, departme
 // EXAM ATTEMPTS
 // ============================================================
 
-export async function startAttempt(candidateId: string, examId: string) {
+export async function startAttempt(
+  candidateId: string,
+  examId: string,
+  deviceData?: {
+    deviceType?: string;
+    deviceName?: string;
+    deviceOs?: string;
+    isDesktopMode?: boolean;
+    deviceInfo?: any;
+  }
+) {
   try {
-    console.log('Starting attempt with:', { candidateId, examId });
+    console.log('Starting attempt with:', { candidateId, examId, deviceData });
     const res = await fetch(`${API_URL}/attempts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ candidateId, examId })
+      body: JSON.stringify({
+        candidateId,
+        examId,
+        deviceType: deviceData?.deviceType,
+        deviceName: deviceData?.deviceName,
+        deviceOs: deviceData?.deviceOs,
+        isDesktopMode: deviceData?.isDesktopMode,
+        deviceInfo: deviceData?.deviceInfo
+      })
     });
     const data = await res.json();
     if (!res.ok) {
@@ -441,12 +504,31 @@ export async function startAttempt(candidateId: string, examId: string) {
   }
 }
 
-export async function updateAttempt(attemptId: string, answers: any[], tabSwitches?: number) {
+export async function updateAttempt(
+  attemptId: string,
+  answers: any[],
+  tabSwitches?: number,
+  deviceData?: {
+    deviceType?: string;
+    deviceName?: string;
+    deviceOs?: string;
+    isDesktopMode?: boolean;
+    deviceInfo?: any;
+  }
+) {
   try {
     const res = await fetch(`${API_URL}/attempts/${attemptId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers, tabSwitches })
+      body: JSON.stringify({
+        answers,
+        tabSwitches,
+        deviceType: deviceData?.deviceType,
+        deviceName: deviceData?.deviceName,
+        deviceOs: deviceData?.deviceOs,
+        isDesktopMode: deviceData?.isDesktopMode,
+        deviceInfo: deviceData?.deviceInfo
+      })
     });
     return res.ok;
   } catch (error) {
@@ -455,7 +537,18 @@ export async function updateAttempt(attemptId: string, answers: any[], tabSwitch
   }
 }
 
-export async function submitAttempt(attemptId: string, answers: any[], tabSwitches?: number) {
+export async function submitAttempt(
+  attemptId: string,
+  answers: any[],
+  tabSwitches?: number,
+  deviceData?: {
+    deviceType?: string;
+    deviceName?: string;
+    deviceOs?: string;
+    isDesktopMode?: boolean;
+    deviceInfo?: any;
+  }
+) {
   try {
     // Defensively sanitize answers to prevent circular references or DOM nodes
     const sanitizedAnswers = (answers || []).map((a: any) => ({
@@ -466,7 +559,15 @@ export async function submitAttempt(attemptId: string, answers: any[], tabSwitch
 
     let body: string;
     try {
-      body = JSON.stringify({ answers: sanitizedAnswers, tabSwitches });
+      body = JSON.stringify({
+        answers: sanitizedAnswers,
+        tabSwitches,
+        deviceType: deviceData?.deviceType,
+        deviceName: deviceData?.deviceName,
+        deviceOs: deviceData?.deviceOs,
+        isDesktopMode: deviceData?.isDesktopMode,
+        deviceInfo: deviceData?.deviceInfo
+      });
     } catch (err) {
       console.error('Failed to stringify answers for submitAttempt. Dumping entries for debugging:');
       sanitizedAnswers.forEach((entry: any, idx: number) => {

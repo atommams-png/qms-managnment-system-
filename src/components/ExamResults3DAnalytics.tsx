@@ -41,6 +41,7 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
   const [sectionView, setSectionView] = useState<'3d-bar' | 'table'>('3d-bar');
   const [passFailView, setPassFailView] = useState<'3d-donut' | 'table'>('3d-donut');
   const [deptView, setDeptView] = useState<'3d-bar' | 'table'>('3d-bar');
+  const [deptDisplayLimit, setDeptDisplayLimit] = useState<'top7' | 'all'>('top7');
   const [integrityView, setIntegrityView] = useState<'3d-bar' | 'table'>('3d-bar');
 
   // Question-wise 3D Analytics state
@@ -56,6 +57,7 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
   const [customDimension, setCustomDimension] = useState<'department' | 'college' | 'section' | 'scoreBracket' | 'passFail' | 'tabSwitches'>('department');
   const [customMetric, setCustomMetric] = useState<'avgPercentage' | 'avgScore' | 'candidateCount' | 'avgCorrect' | 'avgWrong' | 'avgTabSwitches'>('avgPercentage');
   const [customColorTheme, setCustomColorTheme] = useState<'emerald' | 'blue' | 'amber' | 'purple' | 'multi'>('emerald');
+  const [customDisplayLimit, setCustomDisplayLimit] = useState<'top8' | 'all'>('top8');
 
   // Interactive Hover Tooltip State for each canvas
   const [scoreTooltip, setScoreTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, title: '', valueText: '', color: '', details: [] });
@@ -748,20 +750,22 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
         return;
       }
 
-      const floorY = height - 60;
-      const chartHeight = height - 120;
-      const depth = 22;
-
-      draw3DFloorGrid(ctx, width, floorY, depth);
+      const floorY = height - 65;
+      const chartHeight = height - 130;
 
       const count = data.length;
-      const barWidth = Math.max(18, Math.min(48, (width - 120) / count - (count > 8 ? 8 : 15)));
-      const spacing = (width - 120) / count;
+      const availableWidth = width - 110;
+      const spacing = availableWidth / count;
+      const maxCombinedWidth = Math.max(14, spacing * 0.78);
+      const depth = Math.max(6, Math.min(22, maxCombinedWidth * 0.38));
+      const barWidth = Math.max(8, Math.min(50, maxCombinedWidth - depth));
+
+      draw3DFloorGrid(ctx, width, floorY, depth);
       const colors = ['#059669', '#2563eb', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#10b981', '#6366f1'];
 
-      data.forEach((item, idx) => {
+      const itemsWithCoords = data.map((item, idx) => {
         const isHovered = hoveredSectionIdx === idx;
-        const x = 60 + idx * spacing + (spacing - barWidth) / 2;
+        const x = 55 + idx * spacing + (spacing - (barWidth + depth)) / 2;
         const barH = (item.avgPct / 100) * chartHeight;
         const y = floorY - barH;
         const color = colors[idx % colors.length];
@@ -783,24 +787,55 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
           }
         });
 
+        return { item, idx, isHovered, x, y, barH, color };
+      });
+
+      // PASS 1: Draw all 3D bars
+      itemsWithCoords.forEach(({ isHovered, x, y, barH, color }) => {
         if (barH > 0) {
           draw3DBar(ctx, x, y, barWidth, barH, depth, color, isHovered);
         }
+      });
 
+      // PASS 2: Draw all labels on top of bars
+      itemsWithCoords.forEach(({ item, isHovered, x, y }) => {
+        const topY = Math.min(floorY - 10, y - depth - (isHovered ? 12 : 7));
+        ctx.save();
         ctx.fillStyle = isHovered ? '#047857' : '#0f172a';
-        ctx.font = isHovered ? 'bold 13px Inter, sans-serif' : 'bold 11px Inter, sans-serif';
+        ctx.font = isHovered ? 'bold 12px Inter, sans-serif' : (count > 8 ? 'bold 10px Inter, sans-serif' : 'bold 11px Inter, sans-serif');
         ctx.textAlign = 'center';
-        ctx.fillText(`${item.avgPct}%`, x + barWidth / 2 + depth / 2, Math.min(floorY - 8, y - depth - (isHovered ? 10 : 6)));
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`${item.avgPct}%`, x + barWidth / 2 + depth / 2, topY);
+        ctx.restore();
 
-        const maxChars = count > 8 ? 7 : 12;
-        const displaySec = item.section.length > maxChars ? `${item.section.slice(0, maxChars - 2)}..` : item.section;
-        ctx.fillStyle = isHovered ? '#047857' : '#0f172a';
-        ctx.font = 'bold 10px Inter, sans-serif';
-        ctx.fillText(displaySec, x + barWidth / 2, floorY + 18);
+        ctx.save();
+        const labelX = x + barWidth / 2;
+        const labelY = floorY + 12;
 
-        ctx.fillStyle = '#64748b';
-        ctx.font = '9px Inter, sans-serif';
-        ctx.fillText(`${item.avgObt.toFixed(1)}m`, x + barWidth / 2, floorY + 30);
+        if (count > 5) {
+          ctx.translate(labelX, labelY);
+          ctx.rotate(-Math.PI / 4.5);
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = isHovered ? '#047857' : '#1e293b';
+          ctx.font = isHovered ? 'bold 11px Inter, sans-serif' : '600 10px Inter, sans-serif';
+          const maxChars = 14;
+          const displaySec = item.section.length > maxChars ? `${item.section.slice(0, maxChars - 2)}..` : item.section;
+          ctx.fillText(displaySec, 0, 0);
+        } else {
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillStyle = isHovered ? '#047857' : '#1e293b';
+          ctx.font = isHovered ? 'bold 12px Inter, sans-serif' : 'bold 11px Inter, sans-serif';
+          const maxChars = 12;
+          const displaySec = item.section.length > maxChars ? `${item.section.slice(0, maxChars - 2)}..` : item.section;
+          ctx.fillText(displaySec, labelX, labelY);
+
+          ctx.fillStyle = '#64748b';
+          ctx.font = '500 9px Inter, sans-serif';
+          ctx.fillText(`${item.avgObt.toFixed(1)}m`, labelX, labelY + 16);
+        }
+        ctx.restore();
       });
     };
 
@@ -866,12 +901,35 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
         deptMap.set(dept, existing);
       });
 
-      const data = Array.from(deptMap.entries()).map(([dept, d]) => ({
+      const rawData = Array.from(deptMap.entries()).map(([dept, d]) => ({
         dept,
         count: d.count,
         avgPct: d.count > 0 ? Math.round(d.totalPct / d.count) : 0,
         passCount: d.passCount,
       }));
+
+      // Sort by candidate count descending
+      rawData.sort((a, b) => b.count - a.count);
+
+      // Clean top-N aggregation when there are many departments
+      let data = rawData;
+      if (deptDisplayLimit === 'top7' && rawData.length > 7) {
+        const top = rawData.slice(0, 6);
+        const rest = rawData.slice(6);
+        const otherCount = rest.reduce((s, r) => s + r.count, 0);
+        const otherTotalPct = rest.reduce((s, r) => s + (r.avgPct * r.count), 0);
+        const otherPass = rest.reduce((s, r) => s + r.passCount, 0);
+        const otherAvg = otherCount > 0 ? Math.round(otherTotalPct / otherCount) : 0;
+        data = [
+          ...top,
+          {
+            dept: `Others (${rest.length})`,
+            count: otherCount,
+            avgPct: otherAvg,
+            passCount: otherPass,
+          }
+        ];
+      }
 
       if (data.length === 0) {
         ctx.fillStyle = '#94a3b8';
@@ -881,21 +939,25 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
         return;
       }
 
-      const floorY = height - 60;
-      const chartHeight = height - 120;
-      const depth = 22;
-
-      draw3DFloorGrid(ctx, width, floorY, depth);
+      const floorY = height - 70;
+      const chartHeight = height - 135;
 
       const count = data.length;
-      const barWidth = Math.max(18, Math.min(50, (width - 120) / count - (count > 8 ? 8 : 15)));
-      const spacing = (width - 120) / count;
-      const colors = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#db2777', '#0891b2'];
+      const availableWidth = width - 110;
+      const spacing = availableWidth / count;
 
-      data.forEach((item, idx) => {
+      // Mathematically prevent 3D bar collision: barWidth + depth <= 0.78 * spacing
+      const maxCombinedWidth = Math.max(14, spacing * 0.78);
+      const depth = Math.max(6, Math.min(22, maxCombinedWidth * 0.38));
+      const barWidth = Math.max(8, Math.min(52, maxCombinedWidth - depth));
+
+      draw3DFloorGrid(ctx, width, floorY, depth);
+      const colors = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#db2777', '#0891b2', '#10b981', '#f59e0b'];
+
+      const itemsWithCoords = data.map((item, idx) => {
         const isHovered = hoveredDeptIdx === idx;
-        const x = 60 + idx * spacing + (spacing - barWidth) / 2;
-        const barH = (item.avgPct / 100) * chartHeight;
+        const x = 55 + idx * spacing + (spacing - (barWidth + depth)) / 2;
+        const barH = Math.max(3, (item.avgPct / 100) * chartHeight);
         const y = floorY - barH;
         const color = colors[idx % colors.length];
 
@@ -916,31 +978,66 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
           }
         });
 
+        return { item, idx, isHovered, x, y, barH, color };
+      });
+
+      // PASS 1: Draw all 3D bars
+      itemsWithCoords.forEach(({ isHovered, x, y, barH, color }) => {
         if (barH > 0) {
           draw3DBar(ctx, x, y, barWidth, barH, depth, color, isHovered);
         }
+      });
 
+      // PASS 2: Draw all labels on TOP of bars (prevents overlapping or text inside bars)
+      itemsWithCoords.forEach(({ item, isHovered, x, y }) => {
+        // Value label above bar
+        const topY = Math.min(floorY - 10, y - depth - (isHovered ? 12 : 7));
+        ctx.save();
         ctx.fillStyle = isHovered ? '#047857' : '#0f172a';
-        ctx.font = isHovered ? 'bold 13px Inter, sans-serif' : 'bold 11px Inter, sans-serif';
+        ctx.font = isHovered ? 'bold 12px Inter, sans-serif' : (count > 8 ? 'bold 10px Inter, sans-serif' : 'bold 11px Inter, sans-serif');
         ctx.textAlign = 'center';
-        ctx.fillText(`${item.avgPct}%`, x + barWidth / 2 + depth / 2, Math.min(floorY - 8, y - depth - (isHovered ? 10 : 6)));
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`${item.avgPct}%`, x + barWidth / 2 + depth / 2, topY);
+        ctx.restore();
 
-        const maxChars = count > 8 ? 6 : 10;
-        const displayDept = item.dept.length > maxChars ? `${item.dept.slice(0, maxChars - 1)}..` : item.dept;
-        ctx.fillStyle = isHovered ? '#047857' : '#0f172a';
-        ctx.font = 'bold 10px Inter, sans-serif';
-        ctx.fillText(displayDept, x + barWidth / 2, floorY + 18);
+        // X-axis label below floor
+        ctx.save();
+        const labelX = x + barWidth / 2;
+        const labelY = floorY + 12;
 
-        ctx.fillStyle = '#64748b';
-        ctx.font = '9px Inter, sans-serif';
-        ctx.fillText(`${item.count} cand.`, x + barWidth / 2, floorY + 30);
+        if (count > 6) {
+          // Angled labels for clean readability without horizontal collisions
+          ctx.translate(labelX, labelY);
+          ctx.rotate(-Math.PI / 4.5);
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = isHovered ? '#047857' : '#1e293b';
+          ctx.font = isHovered ? 'bold 11px Inter, sans-serif' : '600 10px Inter, sans-serif';
+          const maxLen = 14;
+          const displayLabel = item.dept.length > maxLen ? `${item.dept.slice(0, maxLen - 2)}..` : item.dept;
+          ctx.fillText(displayLabel, 0, 0);
+        } else {
+          // Horizontal label when spacious
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'top';
+          ctx.fillStyle = isHovered ? '#047857' : '#1e293b';
+          ctx.font = isHovered ? 'bold 12px Inter, sans-serif' : 'bold 11px Inter, sans-serif';
+          const maxLen = 12;
+          const displayLabel = item.dept.length > maxLen ? `${item.dept.slice(0, maxLen - 2)}..` : item.dept;
+          ctx.fillText(displayLabel, labelX, labelY);
+
+          ctx.fillStyle = '#64748b';
+          ctx.font = '500 9px Inter, sans-serif';
+          ctx.fillText(`${item.count} cand.`, labelX, labelY + 16);
+        }
+        ctx.restore();
       });
     };
 
     render();
     const animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [candidateAnalytics, hoveredDeptIdx, deptView]);
+  }, [candidateAnalytics, hoveredDeptIdx, deptView, deptDisplayLimit]);
 
   // 5. Anti-Cheat / Integrity 3D Analytics
   useEffect(() => {
@@ -1111,25 +1208,54 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
         return;
       }
 
+      // Group into Top 7 + Others if there are too many categories
+      let finalChartData = chartData;
+      if (customDisplayLimit === 'top8' && chartData.length > 8) {
+        const sorted = [...chartData].sort((a, b) => b.value - a.value);
+        const top = sorted.slice(0, 7);
+        const rest = sorted.slice(7);
+        const otherCount = rest.reduce((s, r) => s + r.count, 0);
+        let otherVal = 0;
+        if (customMetric === 'candidateCount') {
+          otherVal = otherCount;
+        } else {
+          const totalValSum = rest.reduce((s, r) => s + r.value * r.count, 0);
+          otherVal = otherCount > 0 ? Math.round((totalValSum / otherCount) * 10) / 10 : 0;
+        }
+        finalChartData = [
+          ...top,
+          {
+            label: `Others (${rest.length})`,
+            value: otherVal,
+            color: colors[7 % colors.length] || '#64748b',
+            count: otherCount
+          }
+        ];
+      }
+
       if (customChartType === '3d-donut') {
-        draw3DDonutChart(ctx, width / 2, height / 2 + 10, 110, 30, 58, chartData, hoveredCustomIdx, customHitSlices);
+        draw3DDonutChart(ctx, width / 2, height / 2 + 10, 110, 30, 58, finalChartData, hoveredCustomIdx, customHitSlices);
       } else {
-        const maxVal = Math.max(...chartData.map(d => (Number.isFinite(d.value) ? d.value : 0)), 1);
-        const floorY = height - 60;
-        const chartHeight = height - 120;
-        const depth = 24;
+        const maxVal = Math.max(...finalChartData.map(d => (Number.isFinite(d.value) ? d.value : 0)), 1);
+        const floorY = height - 70;
+        const chartHeight = height - 135;
+
+        const count = finalChartData.length;
+        const availableWidth = width - 110;
+        const spacing = availableWidth / count;
+
+        // Guaranteed non-overlapping 3D bar dimensions
+        const maxCombinedWidth = Math.max(14, spacing * 0.78);
+        const depth = Math.max(6, Math.min(22, maxCombinedWidth * 0.38));
+        const barWidth = Math.max(10, Math.min(52, maxCombinedWidth - depth));
 
         draw3DFloorGrid(ctx, width, floorY, depth);
 
-        const count = chartData.length;
-        const barWidth = Math.max(20, Math.min(56, (width - 120) / count - (count > 8 ? 8 : 15)));
-        const spacing = (width - 120) / count;
-
-        chartData.forEach((item, idx) => {
+        const itemsWithCoords = finalChartData.map((item, idx) => {
           const isHovered = hoveredCustomIdx === idx;
           const val = Number.isFinite(item.value) ? item.value : 0;
-          const x = 60 + idx * spacing + (spacing - barWidth) / 2;
-          const barH = maxVal > 0 ? (val / maxVal) * chartHeight : 0;
+          const x = 55 + idx * spacing + (spacing - (barWidth + depth)) / 2;
+          const barH = maxVal > 0 ? Math.max(3, (val / maxVal) * chartHeight) : 0;
           const y = floorY - barH;
 
           customHitBoxes.current.push({
@@ -1148,20 +1274,57 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
             }
           });
 
+          return { item, idx, isHovered, val, x, y, barH };
+        });
+
+        // PASS 1: Draw all 3D bars
+        itemsWithCoords.forEach(({ item, isHovered, x, y, barH }) => {
           if (barH > 0) {
             draw3DBar(ctx, x, y, barWidth, barH, depth, item.color, isHovered);
           }
+        });
 
+        // PASS 2: Draw all labels on top of bars
+        itemsWithCoords.forEach(({ item, isHovered, val, x, y }) => {
+          // Top value label
+          const topY = Math.min(floorY - 10, y - depth - (isHovered ? 12 : 7));
+          ctx.save();
           ctx.fillStyle = isHovered ? '#047857' : '#0f172a';
-          ctx.font = isHovered ? 'bold 14px Inter, sans-serif' : 'bold 12px Inter, sans-serif';
+          ctx.font = isHovered ? 'bold 12px Inter, sans-serif' : (count > 8 ? 'bold 10px Inter, sans-serif' : 'bold 11px Inter, sans-serif');
           ctx.textAlign = 'center';
-          ctx.fillText(`${val}${customMetric === 'avgPercentage' ? '%' : ''}`, x + barWidth / 2 + depth / 2, Math.min(floorY - 8, y - depth - (isHovered ? 12 : 6)));
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(`${val}${customMetric === 'avgPercentage' ? '%' : ''}`, x + barWidth / 2 + depth / 2, topY);
+          ctx.restore();
 
-          const maxChars = count > 8 ? 6 : 12;
-          const displayLabel = item.label.length > maxChars ? `${item.label.slice(0, maxChars - 2)}..` : item.label;
-          ctx.fillStyle = isHovered ? '#047857' : '#0f172a';
-          ctx.font = 'bold 11px Inter, sans-serif';
-          ctx.fillText(displayLabel, x + barWidth / 2, floorY + 18);
+          // X-axis label below floor
+          ctx.save();
+          const labelX = x + barWidth / 2;
+          const labelY = floorY + 12;
+
+          if (count > 6) {
+            ctx.translate(labelX, labelY);
+            ctx.rotate(-Math.PI / 4.5);
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = isHovered ? '#047857' : '#1e293b';
+            ctx.font = isHovered ? 'bold 11px Inter, sans-serif' : '600 10px Inter, sans-serif';
+            const maxLen = 14;
+            const displayLabel = item.label.length > maxLen ? `${item.label.slice(0, maxLen - 2)}..` : item.label;
+            ctx.fillText(displayLabel, 0, 0);
+          } else {
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = isHovered ? '#047857' : '#1e293b';
+            ctx.font = isHovered ? 'bold 12px Inter, sans-serif' : 'bold 11px Inter, sans-serif';
+            const maxLen = 12;
+            const displayLabel = item.label.length > maxLen ? `${item.label.slice(0, maxLen - 2)}..` : item.label;
+            ctx.fillText(displayLabel, labelX, labelY);
+
+            ctx.fillStyle = '#64748b';
+            ctx.font = '500 9px Inter, sans-serif';
+            ctx.fillText(`${item.count} cand.`, labelX, labelY + 16);
+          }
+          ctx.restore();
         });
       }
     };
@@ -1169,7 +1332,7 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
     render();
     const animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [candidateAnalytics, customChartType, customDimension, customMetric, customColorTheme, hoveredCustomIdx]);
+  }, [candidateAnalytics, customChartType, customDimension, customMetric, customColorTheme, hoveredCustomIdx, customDisplayLimit]);
 
   // 6. Question-wise 3D Column Chart
   useEffect(() => {
@@ -2074,7 +2237,31 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
                 Average percentage comparison by candidate department
               </CardDescription>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {deptView === '3d-bar' && (
+                <div className="flex items-center bg-emerald-50/90 border border-emerald-200 rounded-lg p-0.5 text-xs shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => setDeptDisplayLimit('top7')}
+                    className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                      deptDisplayLimit === 'top7' ? 'bg-[#008037] text-white shadow-2xs' : 'text-emerald-950 hover:bg-emerald-100'
+                    }`}
+                    title="Show Top 6 Departments + Others for clean uncluttered viewing"
+                  >
+                    Top 6
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeptDisplayLimit('all')}
+                    className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                      deptDisplayLimit === 'all' ? 'bg-[#008037] text-white shadow-2xs' : 'text-emerald-950 hover:bg-emerald-100'
+                    }`}
+                    title="Show All Departments"
+                  >
+                    All
+                  </button>
+                </div>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -2103,7 +2290,7 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
               <canvas
                 ref={deptCanvasRef}
                 width={560}
-                height={320}
+                height={340}
                 onMouseMove={(e) => handleBarMouseMove(e, deptCanvasRef, deptHitBoxes, setHoveredDeptIdx, setDeptTooltip)}
                 onMouseLeave={() => { setHoveredDeptIdx(null); setDeptTooltip(prev => ({ ...prev, visible: false })); }}
                 className="max-w-full h-auto rounded-lg cursor-pointer"
@@ -2290,7 +2477,7 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
 
         <CardContent className="p-6 space-y-6">
           {/* Controls Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/80">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 p-4 rounded-xl bg-emerald-50/70 border border-emerald-200/80">
             {/* Chart Type */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-emerald-950 flex items-center gap-1">
@@ -2359,6 +2546,20 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
                 <option value="multi">Vibrant Multi-Color</option>
               </select>
             </div>
+
+            {/* Category Density / Limit */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-emerald-950">Category Density</label>
+              <select
+                aria-label="Select Category Density"
+                value={customDisplayLimit}
+                onChange={(e) => setCustomDisplayLimit(e.target.value as any)}
+                className="w-full h-9 rounded-lg border border-emerald-200 bg-white px-2.5 text-xs font-semibold text-gray-800 shadow-xs focus:ring-2 focus:ring-primary"
+              >
+                <option value="top8">Top 7 + Others (Clean & Spaced)</option>
+                <option value="all">Show All Categories</option>
+              </select>
+            </div>
           </div>
 
           {/* Rendered Custom Canvas Container */}
@@ -2366,7 +2567,7 @@ export const ExamResults3DAnalytics: React.FC<ExamResults3DAnalyticsProps> = ({
             <canvas
               ref={customCanvasRef}
               width={760}
-              height={360}
+              height={380}
               onMouseMove={(e) => {
                 if (customChartType === '3d-donut') {
                   handleDonutMouseMove(e, customCanvasRef, customHitSlices, setHoveredCustomIdx, setCustomTooltip);

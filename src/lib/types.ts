@@ -59,6 +59,11 @@ export interface Candidate {
   usn: string;
   department: string;
   section: string;
+  deviceType?: string;
+  deviceName?: string;
+  deviceOs?: string;
+  isDesktopMode?: boolean;
+  deviceInfo?: any;
   registeredAt: string;
 }
 
@@ -75,8 +80,20 @@ export interface ExamAttempt {
   answers: CandidateAnswer[];
   startedAt: string;
   submittedAt: string | null;
+  updatedAt?: string | null;
   tabSwitches: number;
   isSubmitted: boolean;
+  deviceType?: string;
+  deviceName?: string;
+  deviceOs?: string;
+  isDesktopMode?: boolean;
+  deviceInfo?: any;
+  // Joined fields from candidates table
+  candidateDeviceName?: string;
+  candidateDeviceType?: string;
+  candidateDeviceOs?: string;
+  candidateIsDesktopMode?: boolean;
+  candidateDeviceInfo?: any;
 }
 
 export interface ExamResult {
@@ -90,4 +107,9 @@ export interface ExamResult {
   totalMarks: number;
   obtainedMarks: number;
   percentage: number;
+  deviceName?: string;
+  deviceType?: string;
+  deviceOs?: string;
+  isDesktopMode?: boolean;
+  deviceInfo?: any;
 }

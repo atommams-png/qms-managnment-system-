@@ -5,7 +5,7 @@ import { Exam } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, LogOut, FileText, Users, Trophy, Copy, Trash2, Eye, EyeOff, BarChart3, Calendar } from 'lucide-react';
+import { Plus, LogOut, FileText, Users, Trophy, Copy, Trash2, Eye, EyeOff, BarChart3, Calendar, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '@/components/Header';
 import { parseExamScheduleDate, formatExamScheduleDateTime } from '@/lib/dateUtils';
@@ -14,6 +14,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const [exams, setExams] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'notStarted' | 'inactiveExpired'>('all');
   const [totalCandidates, setTotalCandidates] = useState(0);
   const [totalResults, setTotalResults] = useState(0);
@@ -23,14 +24,14 @@ const AdminDashboard = () => {
       navigate('/admin');
       return;
     }
-    refresh();
+    refresh(true);
   }, [navigate]);
 
-  // Auto-refresh every 10 seconds to update exam statuses based on time changes
+  // Auto-refresh every 5 minutes to update exam statuses and stats
   useEffect(() => {
     const interval = setInterval(() => {
-      refresh();
-    }, 10000); // 10 seconds
+      refresh(false);
+    }, 5 * 60 * 1000); // 5 minutes
 
     return () => clearInterval(interval);
   }, []);
@@ -64,8 +65,11 @@ const AdminDashboard = () => {
     });
   };
 
-  const refresh = async () => {
-    setIsLoading(true);
+  const refresh = async (manual = false) => {
+    if (manual) {
+      setIsRefreshing(true);
+      if (exams.length === 0) setIsLoading(true);
+    }
     try {
       // Get all exams and filter based on user selection
       const allExams = await getExams();
@@ -86,12 +90,21 @@ const AdminDashboard = () => {
 
         setTotalCandidates(candidates);
         setTotalResults(results);
+      } else {
+        setTotalCandidates(0);
+        setTotalResults(0);
+      }
+      if (manual && !isLoading) {
+        toast.success('Exams refreshed');
       }
     } catch (error) {
       console.error('Error loading exams:', error);
-      toast.error('Failed to load exams');
+      if (manual) {
+        toast.error('Failed to load exams');
+      }
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -108,7 +121,7 @@ const AdminDashboard = () => {
   const handleToggle = async (id: string) => {
     try {
       await toggleExamActive(id);
-      await refresh();
+      await refresh(false);
       toast.success('Exam status updated');
     } catch (error) {
       toast.error('Failed to update exam');
@@ -123,7 +136,7 @@ const AdminDashboard = () => {
           toast.error('Failed to delete exam');
           return;
         }
-        await refresh();
+        await refresh(false);
         toast.success('Exam deleted');
       } catch (error) {
         toast.error('Failed to delete exam');
@@ -161,6 +174,16 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen pt-4 bg-background">
       <Header title="Admin Portal">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => refresh(true)}
+          disabled={isRefreshing}
+          className="hidden sm:inline-flex"
+          title="Refresh dashboard data"
+        >
+          <RefreshCw className={`mr-1.5 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
+        </Button>
         <Button onClick={() => navigate('/admin/create-exam')} size="sm">
           <Plus className="mr-1.5 h-4 w-4" /> New Exam
         </Button>
@@ -210,7 +233,20 @@ const AdminDashboard = () => {
         {/* Exams List */}
         <div>
           <div className="mb-6 space-y-4">
-            <h2 className="text-lg font-semibold">Your Exams</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Your Exams</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refresh(true)}
+                disabled={isRefreshing}
+                className="h-8 gap-1.5 text-xs"
+                title="Refresh exam list"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </Button>
+            </div>
             
             {/* Status Filter Tabs */}
             <div className="flex flex-wrap gap-2">

@@ -15,7 +15,17 @@ router.get('/attempt/:attemptId', async (req, res) => {
     const { attemptId } = req.params;
 
     const [results] = await pool.execute(
-      'SELECT * FROM exam_results WHERE attempt_id = ?',
+      `SELECT r.*,
+              c.name, c.usn, c.email, c.department, c.college, c.section,
+              COALESCE(ea.device_name, c.device_name) as device_name,
+              COALESCE(ea.device_type, c.device_type) as device_type,
+              COALESCE(ea.device_os, c.device_os) as device_os,
+              COALESCE(ea.is_desktop_mode, c.is_desktop_mode) as is_desktop_mode,
+              COALESCE(ea.device_info, c.device_info) as device_info
+       FROM exam_results r
+       JOIN candidates c ON r.candidate_id = c.id
+       LEFT JOIN exam_attempts ea ON r.attempt_id = ea.id
+       WHERE r.attempt_id = ?`,
       [attemptId]
     );
 
@@ -41,9 +51,16 @@ router.get('/exam/:examId', async (req, res) => {
     const { examId } = req.params;
 
     const [results] = await pool.execute(
-      `SELECT r.*, c.name, c.usn, c.email, c.department
+      `SELECT r.*,
+              c.name, c.usn, c.email, c.department, c.college, c.section,
+              COALESCE(ea.device_name, c.device_name) as device_name,
+              COALESCE(ea.device_type, c.device_type) as device_type,
+              COALESCE(ea.device_os, c.device_os) as device_os,
+              COALESCE(ea.is_desktop_mode, c.is_desktop_mode) as is_desktop_mode,
+              COALESCE(ea.device_info, c.device_info) as device_info
        FROM exam_results r
        JOIN candidates c ON r.candidate_id = c.id
+       LEFT JOIN exam_attempts ea ON r.attempt_id = ea.id
        WHERE r.exam_id = ?
        ORDER BY r.percentage DESC`,
       [examId]
@@ -67,9 +84,15 @@ router.get('/candidate/:candidateId', async (req, res) => {
     const { candidateId } = req.params;
 
     const [results] = await pool.execute(
-      `SELECT r.*, e.name as exam_name, e.code
+      `SELECT r.*, e.name as exam_name, e.code,
+              COALESCE(ea.device_name, c.device_name) as device_name,
+              COALESCE(ea.device_type, c.device_type) as device_type,
+              COALESCE(ea.device_os, c.device_os) as device_os,
+              COALESCE(ea.is_desktop_mode, c.is_desktop_mode) as is_desktop_mode
        FROM exam_results r
        JOIN exams e ON r.exam_id = e.id
+       JOIN candidates c ON r.candidate_id = c.id
+       LEFT JOIN exam_attempts ea ON r.attempt_id = ea.id
        WHERE r.candidate_id = ?
        ORDER BY r.calculated_at DESC`,
       [candidateId]
@@ -135,19 +158,21 @@ router.get('/export/:examId', async (req, res) => {
 
     const [results] = await pool.execute(
       `SELECT c.name, c.email, c.usn, c.department, c.college,
+              COALESCE(ea.device_name, c.device_name, 'Unknown') as device_name,
               r.total_marks, r.obtained_marks, r.percentage,
               r.correct_answers, r.wrong_answers, r.unanswered
        FROM exam_results r
        JOIN candidates c ON r.candidate_id = c.id
+       LEFT JOIN exam_attempts ea ON r.attempt_id = ea.id
        WHERE r.exam_id = ?
        ORDER BY r.percentage DESC`,
       [examId]
     );
 
     // Create CSV
-    let csv = 'Name,Email,USN,Department,College,Total Marks,Obtained Marks,Percentage,Correct,Wrong,Unanswered\n';
+    let csv = 'Name,Email,USN,Department,College,Device Used,Total Marks,Obtained Marks,Percentage,Correct,Wrong,Unanswered\n';
     results.forEach(r => {
-      csv += `"${r.name}","${r.email}","${r.usn}","${r.department}","${r.college}",${r.total_marks},${r.obtained_marks},${r.percentage},${r.correct_answers},${r.wrong_answers},${r.unanswered}\n`;
+      csv += `"${r.name}","${r.email}","${r.usn}","${r.department}","${r.college}","${r.device_name}",${r.total_marks},${r.obtained_marks},${r.percentage},${r.correct_answers},${r.wrong_answers},${r.unanswered}\n`;
     });
 
     res.set({

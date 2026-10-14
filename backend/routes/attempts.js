@@ -8,6 +8,44 @@ import { generateUUID } from '../utils.js';
 
 const router = express.Router();
 let hasQuestionNegativeMarksColumn;
+let attemptColumnsEnsured = false;
+
+async function ensureAttemptColumns() {
+  if (attemptColumnsEnsured) return;
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT COLUMN_NAME
+       FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'exam_attempts'`
+    );
+
+    const existingColumns = rows.map(r => r.COLUMN_NAME);
+
+    if (!existingColumns.includes('device_type')) {
+      await pool.execute(`
+        ALTER TABLE exam_attempts
+        ADD COLUMN device_type VARCHAR(50) DEFAULT NULL COMMENT 'mobile, desktop, tablet' AFTER exam_id,
+        ADD COLUMN device_name VARCHAR(100) DEFAULT NULL COMMENT 'Detected Device Label' AFTER device_type,
+        ADD COLUMN device_os VARCHAR(50) DEFAULT NULL COMMENT 'Android, iOS, Windows, macOS, Linux' AFTER device_name,
+        ADD COLUMN is_desktop_mode BOOLEAN NOT NULL DEFAULT 0 COMMENT 'Whether student enabled desktop version' AFTER device_os,
+        ADD COLUMN device_info JSON DEFAULT NULL COMMENT 'Hardware and browser telemetry' AFTER is_desktop_mode
+      `);
+    }
+
+    if (!existingColumns.includes('updated_at')) {
+      await pool.execute(`
+        ALTER TABLE exam_attempts
+        ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER is_submitted
+      `);
+    }
+
+    attemptColumnsEnsured = true;
+  } catch (err) {
+    console.error('Error ensuring attempt columns:', err);
+  }
+}
 
 const supportsQuestionNegativeMarks = async () => {
   if (hasQuestionNegativeMarksColumn !== undefined) {
@@ -44,11 +82,23 @@ const safeJsonParse = (value, fallback = []) => {
 // ============================================================
 router.post('/', async (req, res) => {
   try {
-    const { candidateId, examId } = req.body;
+    await ensureAttemptColumns();
+
+    const {
+      candidateId,
+      examId,
+      deviceType,
+      deviceName,
+      deviceOs,
+      isDesktopMode,
+      deviceInfo
+    } = req.body;
 
     if (!candidateId || !examId) {
       return res.status(400).json({ error: 'Candidate ID and Exam ID required' });
     }
+
+    const deviceInfoJson = deviceInfo ? (typeof deviceInfo === 'string' ? deviceInfo : JSON.stringify(deviceInfo)) : null;
 
     // Check if already attempted
     const [existing] = await pool.execute(
@@ -60,6 +110,31 @@ router.post('/', async (req, res) => {
       const attempt = existing[0];
       if (attempt.is_submitted) {
         return res.status(400).json({ error: 'Candidate has already submitted this exam' });
+      }
+
+      // If device info provided on resume, update it
+      if (deviceType || deviceName || deviceOs) {
+        try {
+          await pool.execute(
+            `UPDATE exam_attempts
+             SET device_type = COALESCE(?, device_type),
+                 device_name = COALESCE(?, device_name),
+                 device_os = COALESCE(?, device_os),
+                 is_desktop_mode = COALESCE(?, is_desktop_mode),
+                 device_info = COALESCE(?, device_info)
+             WHERE id = ?`,
+            [
+              deviceType || null,
+              deviceName || null,
+              deviceOs || null,
+              isDesktopMode !== undefined ? (isDesktopMode ? 1 : 0) : null,
+              deviceInfoJson,
+              attempt.id
+            ]
+          );
+        } catch (e) {
+          console.error('Error updating resumed attempt device info:', e);
+        }
       }
 
       // If not submitted, allow resuming without losing access
@@ -74,7 +149,12 @@ router.post('/', async (req, res) => {
           answers: attempt.answers,
           tabSwitches: attempt.tab_switches,
           isSubmitted: false,
-          startedAt: attempt.started_at
+          startedAt: attempt.started_at,
+          deviceType: attempt.device_type || deviceType,
+          deviceName: attempt.device_name || deviceName,
+          deviceOs: attempt.device_os || deviceOs,
+          isDesktopMode: Boolean(attempt.is_desktop_mode ?? isDesktopMode),
+          deviceInfo: safeJsonParse(attempt.device_info, deviceInfo)
         },
         message: 'Exam attempt resumed'
       });
@@ -84,9 +164,19 @@ router.post('/', async (req, res) => {
 
     await pool.execute(
       `INSERT INTO exam_attempts (
-        id, candidate_id, exam_id, answers, tab_switches, is_submitted
-      ) VALUES (?, ?, ?, '[]', 0, 0)`,
-      [id, candidateId, examId]
+        id, candidate_id, exam_id, device_type, device_name, device_os,
+        is_desktop_mode, device_info, answers, tab_switches, is_submitted
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', 0, 0)`,
+      [
+        id,
+        candidateId,
+        examId,
+        deviceType || null,
+        deviceName || null,
+        deviceOs || null,
+        isDesktopMode ? 1 : 0,
+        deviceInfoJson
+      ]
     );
 
     res.json({
@@ -98,7 +188,12 @@ router.post('/', async (req, res) => {
         answers: [],
         tabSwitches: 0,
         isSubmitted: false,
-        startedAt: new Date().toISOString()
+        startedAt: new Date().toISOString(),
+        deviceType,
+        deviceName,
+        deviceOs,
+        isDesktopMode: Boolean(isDesktopMode),
+        deviceInfo
       },
       message: 'Exam attempt started'
     });
@@ -113,6 +208,7 @@ router.post('/', async (req, res) => {
 // ============================================================
 router.get('/:id', async (req, res) => {
   try {
+    await ensureAttemptColumns();
     const { id } = req.params;
 
     const [attempts] = await pool.execute(
@@ -126,6 +222,7 @@ router.get('/:id', async (req, res) => {
 
     const attempt = attempts[0];
     attempt.answers = safeJsonParse(attempt.answers, []);
+    attempt.device_info = safeJsonParse(attempt.device_info, null);
 
     res.json({
       success: true,
@@ -142,8 +239,9 @@ router.get('/:id', async (req, res) => {
 // ============================================================
 router.put('/:id', async (req, res) => {
   try {
+    await ensureAttemptColumns();
     const { id } = req.params;
-    const { answers, tabSwitches } = req.body;
+    const { answers, tabSwitches, deviceType, deviceName, deviceOs, isDesktopMode, deviceInfo } = req.body;
 
     if (!Array.isArray(answers)) {
       return res.status(400).json({ error: 'Answers must be an array' });
@@ -155,6 +253,31 @@ router.put('/:id', async (req, res) => {
     if (tabSwitches !== undefined) {
       updateParts.push('tab_switches = ?');
       values.push(tabSwitches);
+    }
+
+    if (deviceType !== undefined) {
+      updateParts.push('device_type = ?');
+      values.push(deviceType);
+    }
+
+    if (deviceName !== undefined) {
+      updateParts.push('device_name = ?');
+      values.push(deviceName);
+    }
+
+    if (deviceOs !== undefined) {
+      updateParts.push('device_os = ?');
+      values.push(deviceOs);
+    }
+
+    if (isDesktopMode !== undefined) {
+      updateParts.push('is_desktop_mode = ?');
+      values.push(isDesktopMode ? 1 : 0);
+    }
+
+    if (deviceInfo !== undefined) {
+      updateParts.push('device_info = ?');
+      values.push(typeof deviceInfo === 'string' ? deviceInfo : JSON.stringify(deviceInfo));
     }
 
     values.push(id);
@@ -178,8 +301,9 @@ router.put('/:id', async (req, res) => {
 router.post('/:id/submit', async (req, res) => {
   let connection;
   try {
+    await ensureAttemptColumns();
     const { id } = req.params;
-    const { answers, tabSwitches } = req.body;
+    const { answers, tabSwitches, deviceType, deviceName, deviceOs, isDesktopMode, deviceInfo } = req.body;
 
     if (!Array.isArray(answers)) {
       return res.status(400).json({ error: 'Answers must be an array' });
@@ -229,12 +353,37 @@ router.post('/:id/submit', async (req, res) => {
     // Update attempt status
     const updateParts = ['is_submitted = 1', 'submitted_at = NOW()', 'answers = ?'];
     const values = [JSON.stringify(answers)];
-    
+
     if (tabSwitches !== undefined) {
       updateParts.push('tab_switches = ?');
       values.push(tabSwitches);
     }
-    
+
+    if (deviceType !== undefined) {
+      updateParts.push('device_type = ?');
+      values.push(deviceType);
+    }
+
+    if (deviceName !== undefined) {
+      updateParts.push('device_name = ?');
+      values.push(deviceName);
+    }
+
+    if (deviceOs !== undefined) {
+      updateParts.push('device_os = ?');
+      values.push(deviceOs);
+    }
+
+    if (isDesktopMode !== undefined) {
+      updateParts.push('is_desktop_mode = ?');
+      values.push(isDesktopMode ? 1 : 0);
+    }
+
+    if (deviceInfo !== undefined) {
+      updateParts.push('device_info = ?');
+      values.push(typeof deviceInfo === 'string' ? deviceInfo : JSON.stringify(deviceInfo));
+    }
+
     values.push(id);
 
     const query = `UPDATE exam_attempts SET ${updateParts.join(', ')} WHERE id = ?`;
@@ -344,10 +493,16 @@ router.post('/:id/submit', async (req, res) => {
 // ============================================================
 router.get('/exam/:examId', async (req, res) => {
   try {
+    await ensureAttemptColumns();
     const { examId } = req.params;
 
     const [attempts] = await pool.execute(
-      `SELECT ea.*, c.name, c.usn, c.email
+      `SELECT ea.*, c.name, c.usn, c.email, c.department, c.college, c.section,
+              c.device_name as candidate_device_name,
+              c.device_type as candidate_device_type,
+              c.device_os as candidate_device_os,
+              c.is_desktop_mode as candidate_is_desktop_mode,
+              c.device_info as candidate_device_info
        FROM exam_attempts ea
        JOIN candidates c ON ea.candidate_id = c.id
        WHERE ea.exam_id = ?

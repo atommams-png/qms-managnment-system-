@@ -5,18 +5,32 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import Header from '@/components/Header';
+import { detectDeviceAsync, DeviceInfo } from '@/lib/deviceDetector';
+import DeviceBadge from '@/components/DeviceBadge';
 
 const CandidateRegister = () => {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
-  const [exam, setExam] = useState(null);
+  const [exam, setExam] = useState<any>(null);
   const [accessMessage, setAccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [detectedDev, setDetectedDev] = useState<DeviceInfo | null>(null);
   const [form, setForm] = useState({ name: '', email: '', phone: '', college: '', usn: '', department: '', section: '' });
   const [errors, setErrors] = useState({ name: '', email: '', phone: '' });
+
+  // Detect student's device on component mount
+  useEffect(() => {
+    let isMounted = true;
+    detectDeviceAsync().then(info => {
+      if (isMounted) {
+        setDetectedDev(info);
+      }
+    });
+    return () => { isMounted = false; };
+  }, []);
 
   // Load exam data
   useEffect(() => {
@@ -113,6 +127,9 @@ const CandidateRegister = () => {
       return;
     }
 
+    // Refresh device detection right at submission time for maximum accuracy
+    const currentDevice = await detectDeviceAsync();
+
     // Enter fullscreen immediately from the user gesture before any async work starts.
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen?.().catch(() => {
@@ -120,11 +137,26 @@ const CandidateRegister = () => {
       });
     }
 
-    // Register candidate directly (backend verifies uniqueness via indexed constraint)
-    const res = await registerCandidate({ ...form, examId: exam.id });
+    // Register candidate with verified device telemetry
+    const res = await registerCandidate({
+      ...form,
+      examId: exam.id,
+      deviceType: currentDevice.deviceType,
+      deviceName: currentDevice.deviceLabel,
+      deviceOs: currentDevice.os,
+      isDesktopMode: currentDevice.isDesktopMode,
+      deviceInfo: currentDevice.deviceDetails
+    });
+
     if (res.success && res.data) {
       toast.success('Registered! Starting exam...');
-      navigate(`/exam/${code}/take`, { state: { candidateId: res.data.id, examId: exam.id } });
+      navigate(`/exam/${code}/take`, {
+        state: {
+          candidateId: res.data.id,
+          examId: exam.id,
+          deviceInfo: currentDevice
+        }
+      });
     } else {
       toast.error(res.error || 'Registration failed');
       if (document.fullscreenElement) {
@@ -150,43 +182,64 @@ const CandidateRegister = () => {
       <div className="flex items-center justify-center p-4">
         <Card className="w-full max-w-lg animate-fade-in">
           <CardHeader>
-            <CardTitle>Candidate Registration</CardTitle>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle>Candidate Registration</CardTitle>
+              {detectedDev && (
+                <DeviceBadge
+                  deviceLabel={detectedDev.deviceLabel}
+                  deviceType={detectedDev.deviceType}
+                  deviceOs={detectedDev.os}
+                  isDesktopMode={detectedDev.isDesktopMode}
+                  deviceInfo={detectedDev.deviceDetails}
+                  size="sm"
+                />
+              )}
+            </div>
             <CardDescription>
               Exam: <span className="font-semibold">{exam.name}</span> · {exam.questions.length} questions · {exam.settings.duration} min
             </CardDescription>
-          </CardHeader>
-        <CardContent>
-          <form onSubmit={handleRegister} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {[
-                { key: 'name', label: 'Full Name', placeholder: 'Atom' },
-                { key: 'email', label: 'Email', placeholder: 'atom@example.com', type: 'email' },
-                { key: 'phone', label: 'Phone', placeholder: '0123456789', type: 'tel' },
-                { key: 'college', label: 'College Name', placeholder: 'ABC University' },
-                { key: 'usn', label: 'USN / Roll No', placeholder: '1AB20CS001' },
-                { key: 'department', label: 'Department', placeholder: 'Computer Science' },
-                { key: 'section', label: 'Section', placeholder: 'A' },
-              ].map(({ key, label, placeholder, type }) => (
-                <div key={key} className="space-y-2">
-                  <Label>{label}</Label>
-                  <Input
-                    type={type || 'text'}
-                    placeholder={placeholder}
-                    value={(form as any)[key]}
-                    onChange={e => update(key, e.target.value)}
-                    required
-                    className={errors[key as keyof typeof errors] ? 'border-red-500' : ''}
-                  />
-                  {errors[key as keyof typeof errors] && (
-                    <p className="text-sm text-red-500">{errors[key as keyof typeof errors]}</p>
-                  )}
+
+            {detectedDev?.isDesktopMode && (
+              <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">Device Notice:</span> You are using a mobile device with <strong>Desktop Site</strong> mode enabled. The exam system has accurately fingerprinted your device and logged this for the examination proctors.
                 </div>
-              ))}
-            </div>
-            <Button type="submit" className="w-full" size="lg">Start Exam</Button>
-          </form>
-        </CardContent>
-      </Card>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleRegister} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                {[
+                  { key: 'name', label: 'Full Name', placeholder: 'Atom' },
+                  { key: 'email', label: 'Email', placeholder: 'atom@example.com', type: 'email' },
+                  { key: 'phone', label: 'Phone', placeholder: '0123456789', type: 'tel' },
+                  { key: 'college', label: 'College Name', placeholder: 'ABC University' },
+                  { key: 'usn', label: 'USN / Roll No', placeholder: '1AB20CS001' },
+                  { key: 'department', label: 'Department', placeholder: 'Computer Science' },
+                  { key: 'section', label: 'Section', placeholder: 'A' },
+                ].map(({ key, label, placeholder, type }) => (
+                  <div key={key} className="space-y-2">
+                    <Label>{label}</Label>
+                    <Input
+                      type={type || 'text'}
+                      placeholder={placeholder}
+                      value={(form as any)[key]}
+                      onChange={e => update(key, e.target.value)}
+                      required
+                      className={errors[key as keyof typeof errors] ? 'border-red-500' : ''}
+                    />
+                    {errors[key as keyof typeof errors] && (
+                      <p className="text-sm text-red-500">{errors[key as keyof typeof errors]}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <Button type="submit" className="w-full" size="lg">Start Exam</Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

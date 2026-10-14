@@ -177,16 +177,46 @@ export async function isDuplicateCandidate(examId: string, usn: string, departme
 // EXAM ATTEMPTS - All operations use API
 // ============================================================
 
-export async function startAttempt(candidateId: string, examId: string): Promise<ExamAttempt | null> {
-  return await api.startAttempt(candidateId, examId);
+export async function startAttempt(
+  candidateId: string,
+  examId: string,
+  deviceData?: {
+    deviceType?: string;
+    deviceName?: string;
+    deviceOs?: string;
+    isDesktopMode?: boolean;
+    deviceInfo?: any;
+  }
+): Promise<ExamAttempt | null> {
+  return await api.startAttempt(candidateId, examId, deviceData);
 }
 
-export async function updateAttempt(attempt: ExamAttempt): Promise<boolean> {
-  return await api.updateAttempt(attempt.id, attempt.answers, attempt.tabSwitches);
+export async function updateAttempt(
+  attempt: ExamAttempt,
+  deviceData?: {
+    deviceType?: string;
+    deviceName?: string;
+    deviceOs?: string;
+    isDesktopMode?: boolean;
+    deviceInfo?: any;
+  }
+): Promise<boolean> {
+  return await api.updateAttempt(attempt.id, attempt.answers, attempt.tabSwitches, deviceData);
 }
 
-export async function submitAttempt(attemptId: string, answers: any[], tabSwitches?: number): Promise<ExamResult | null> {
-  return await api.submitAttempt(attemptId, answers, tabSwitches);
+export async function submitAttempt(
+  attemptId: string,
+  answers: any[],
+  tabSwitches?: number,
+  deviceData?: {
+    deviceType?: string;
+    deviceName?: string;
+    deviceOs?: string;
+    isDesktopMode?: boolean;
+    deviceInfo?: any;
+  }
+): Promise<ExamResult | null> {
+  return await api.submitAttempt(attemptId, answers, tabSwitches, deviceData);
 }
 
 export async function getAttempts(examId?: string): Promise<ExamAttempt[]> {
