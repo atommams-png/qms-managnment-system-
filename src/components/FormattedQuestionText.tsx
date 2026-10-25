@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Copy, Check, Terminal, Code2 } from 'lucide-react';
+import React from 'react';
+import { Terminal } from 'lucide-react';
 
 export interface ContentBlock {
   type: 'text' | 'code';
@@ -247,31 +247,8 @@ interface CodeSnippetProps {
 export const CodeSnippet: React.FC<CodeSnippetProps> = ({
   code,
   language = 'Code',
-  showCopyButton = true,
   compact = false,
 }) => {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(code);
-      } else {
-        const textArea = document.createElement('textarea');
-        textArea.value = code;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-      }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.warn('Failed to copy code snippet:', err);
-    }
-  };
-
   const lineCount = code.split('\n').length;
   const showLineNumbers = lineCount > 2;
 
@@ -290,26 +267,6 @@ export const CodeSnippet: React.FC<CodeSnippetProps> = ({
             ({lineCount} line{lineCount !== 1 ? 's' : ''})
           </span>
         </div>
-        {showCopyButton && (
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-sans font-medium text-slate-300 hover:text-white bg-slate-700/60 hover:bg-slate-700 transition-colors"
-            title="Copy code"
-          >
-            {copied ? (
-              <>
-                <Check className="h-3 w-3 text-emerald-400" />
-                <span className="text-emerald-400">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-3 w-3" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-        )}
       </div>
 
       {/* Code Area */}
