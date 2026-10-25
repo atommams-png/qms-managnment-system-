@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import Header from '@/components/Header';
 import { detectDeviceAsync, DeviceInfo } from '@/lib/deviceDetector';
 import DeviceBadge from '@/components/DeviceBadge';
+import { FormattedQuestionText, FormattedOptionText } from '@/components/FormattedQuestionText';
 
 const TakeExam = () => {
   const { code } = useParams<{ code: string }>();
@@ -750,10 +751,12 @@ const TakeExam = () => {
         <div className="flex-1 space-y-6">
           <Card>
             <CardContent className="pt-6">
-              <p className="mb-4 text-lg font-medium">
-                <span className="mr-2 text-primary font-bold">Q{currentQ + 1}.</span>
-                {q.text}
-              </p>
+              <div className="mb-4 text-base sm:text-lg font-medium">
+                <FormattedQuestionText
+                  text={q.text}
+                  qNumber={currentQ + 1}
+                />
+              </div>
               {q.imageUrl && <img src={q.imageUrl} alt="Question" className="mb-4 max-h-64 w-auto rounded border" />}
               {q.type === 'reading-comprehension' && (q.passage || (q.passageGroupId && passageMap[q.passageGroupId])) && (
                 <div className="mb-6 p-4 bg-muted rounded-lg border border-border">
@@ -773,13 +776,13 @@ const TakeExam = () => {
                     }`}
                   >
                     <div className="flex items-start gap-3">
-                      <span className={`mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                      <span className={`mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold mt-0.5 ${
                         currentAnswer === i ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                       }`}>
                         {q.type === 'true-false' ? (opt === 'True' ? 'T' : 'F') : String.fromCharCode(65 + i)}
                       </span>
-                      <div className="flex-1">
-                        <p>{opt}</p>
+                      <div className="flex-1 min-w-0">
+                        <FormattedOptionText text={opt} />
                         {q.optionImages?.[i] && q.type === 'mcq-image' && <img src={q.optionImages[i]} alt={`Option ${String.fromCharCode(65 + i)}`} className="mt-2 max-h-32 w-auto rounded" />}
                       </div>
                     </div>

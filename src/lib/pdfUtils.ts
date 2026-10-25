@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Exam, Candidate, ExamResult, ExamAttempt } from './types';
+import { parseQuestionContent } from '@/components/FormattedQuestionText';
 
 // Helper: Format date/time
 function formatDateTime(value?: string | null): string {
@@ -1634,4 +1635,395 @@ export async function exportExamDetailedPdfReport(
   const filename = `${cleanName}_ATOM_Report_${includeResults ? 'With_Complete_Results' : 'Without_Results'}_${isFiltered ? 'Filtered' : 'Full'}.pdf`;
 
   doc.save(filename);
+}
+
+/**
+ * EXPORT EXAM QUESTION PAPER AS PROFESSIONAL PDF
+ * Preserves code snippets, programs, line breaks, indentation, and alignment.
+ */
+export async function exportQuestionPaperPdf(
+  exam: Exam,
+  options?: { showAnswers?: boolean }
+): Promise<void> {
+  const showAnswers = options?.showAnswers ?? true;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const leftMargin = 14;
+  const rightMargin = 14;
+  const topMargin = 22;
+  const bottomMargin = 22;
+  const contentWidth = pageWidth - leftMargin - rightMargin; // 182mm
+
+  const logoDataUrl = await getLogoDataUrl();
+  const examNegMarks = exam.settings?.negativeMarks ?? 0;
+  const totalMarks = exam.questions.reduce((sum, q) => sum + (q.marks || 1), 0);
+
+  let currentY = topMargin;
+
+  // Helper to draw branded header and footer on every page
+  const drawPageHeaderAndFooter = (isFirstPage: boolean) => {
+    // Top right corner triangle accent
+    doc.setFillColor(245, 158, 11);
+    doc.triangle(pageWidth, 0, pageWidth - 26, 0, pageWidth, 20, 'F');
+    doc.setFillColor(0, 128, 55);
+    doc.triangle(pageWidth, 0, pageWidth - 12, 0, pageWidth, 9, 'F');
+
+    // Logo / Brand on left
+    if (logoDataUrl) {
+      try {
+        doc.addImage(logoDataUrl, 'PNG', leftMargin, 6, 32, 12);
+      } catch (e) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(14);
+        doc.setTextColor(0, 128, 55);
+        doc.text('ATOM QMS', leftMargin, 14);
+      }
+    } else {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(0, 128, 55);
+      doc.text('ATOM QMS', leftMargin, 14);
+    }
+
+    // Top Header line on subsequent pages
+    if (!isFirstPage) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`${exam.name} (${exam.code}) - Question Paper`, leftMargin + 36, 12);
+      doc.setDrawColor(226, 232, 240);
+      doc.line(leftMargin, 18, pageWidth - rightMargin, 18);
+    }
+
+    // Footer line & text
+    doc.setDrawColor(226, 232, 240);
+    doc.line(leftMargin, pageHeight - 14, pageWidth - rightMargin, pageHeight - 14);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('ATOM QMS | Confidential Exam Material | www.atomm.in', leftMargin, pageHeight - 9);
+  };
+
+  // Check available height and create new page if needed
+  const ensureSpace = (neededHeight: number) => {
+    if (currentY + neededHeight > pageHeight - bottomMargin) {
+      doc.addPage();
+      drawPageHeaderAndFooter(false);
+      currentY = topMargin + 2;
+    }
+  };
+
+  // Draw Page 1 Header
+  drawPageHeaderAndFooter(true);
+  currentY = 24;
+
+  // Title Banner
+  doc.setFillColor(0, 128, 55);
+  doc.roundedRect(leftMargin, currentY, contentWidth, 18, 2, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(255, 255, 255);
+  doc.text('EXAM QUESTION PAPER', leftMargin + 6, currentY + 7);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(240, 253, 244);
+  doc.text(
+    `${exam.name}  |  Code: ${exam.code}  |  Duration: ${exam.settings?.duration || 60} Mins  |  Total Marks: ${totalMarks}`,
+    leftMargin + 6,
+    currentY + 13
+  );
+
+  currentY += 23;
+
+  // Instructions Box
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(leftMargin, currentY, contentWidth, 14, 1.5, 1.5, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Instructions & Guidelines:', leftMargin + 4, currentY + 4.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(
+    `• Total Questions: ${exam.questions.length} | Passing: 50% | Negative marking: ${examNegMarks > 0 ? `-${examNegMarks} per wrong answer` : 'None'}`,
+    leftMargin + 4,
+    currentY + 8.5
+  );
+  doc.text(
+    `• For programming questions, code indentation, line breaks, and whitespace formatting are precisely aligned.`,
+    leftMargin + 4,
+    currentY + 11.5
+  );
+
+  currentY += 18;
+
+  // Render each question
+  exam.questions.forEach((q, idx) => {
+    const qNum = idx + 1;
+    const marks = q.marks || 1;
+    const negMarks = q.negativeMarks ?? examNegMarks;
+    const typeLabel = q.type === 'mcq' ? 'MCQ' : q.type === 'mcq-image' ? 'MCQ + Image' : q.type === 'true-false' ? 'True/False' : 'Reading Comprehension';
+
+    // Parse question text into prose and code blocks
+    const contentBlocks = parseQuestionContent(q.text || '');
+
+    // Estimate height needed for this question header
+    ensureSpace(32);
+
+    // Question Header Strip
+    doc.setFillColor(241, 245, 249);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(leftMargin, currentY, contentWidth, 7, 1, 1, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(0, 128, 55);
+    doc.text(`Question ${qNum}`, leftMargin + 3, currentY + 4.8);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    const metaText = `Type: ${typeLabel}   |   Marks: +${marks}${negMarks > 0 ? `   |   Negative: -${negMarks}` : ''}${q.section ? `   |   Section: ${q.section}` : ''}`;
+    doc.text(metaText, pageWidth - rightMargin - 3, currentY + 4.8, { align: 'right' });
+
+    currentY += 10;
+
+    // Reading Passage if RC
+    if (q.type === 'reading-comprehension' && q.passage) {
+      ensureSpace(20);
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(203, 213, 225);
+
+      const passageLines = doc.splitTextToSize(`Passage: ${q.passage}`, contentWidth - 8);
+      const passageBoxHeight = Math.min(60, passageLines.length * 3.8 + 6);
+
+      doc.roundedRect(leftMargin, currentY, contentWidth, passageBoxHeight, 1, 1, 'FD');
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8);
+      doc.setTextColor(51, 65, 85);
+      doc.text(passageLines.slice(0, 14), leftMargin + 4, currentY + 4.5);
+      currentY += passageBoxHeight + 3;
+    }
+
+    // Question Image if available
+    if (q.imageUrl) {
+      try {
+        ensureSpace(42);
+        doc.addImage(q.imageUrl, 'PNG', leftMargin, currentY, 65, 36);
+        currentY += 39;
+      } catch (err) {
+        console.warn('Could not add image to question paper PDF', err);
+      }
+    }
+
+    // Render Question Content (Prose and Code Blocks)
+    contentBlocks.forEach((block) => {
+      if (block.type === 'code') {
+        const rawLines = block.content.split('\n');
+        // Expand tabs to 4 spaces to ensure consistent column alignment
+        const codeLines = rawLines.map(l => l.replace(/\t/g, '    '));
+        const codeLineHeight = 3.8;
+        const codePadding = 3;
+        const totalCodeHeight = codeLines.length * codeLineHeight + (codePadding * 2);
+
+        // If the code snippet can fit on a single page, ensure the whole block starts together
+        const maxSinglePageCodeHeight = pageHeight - bottomMargin - topMargin - 12;
+        if (totalCodeHeight <= maxSinglePageCodeHeight) {
+          ensureSpace(totalCodeHeight + 6);
+        } else {
+          ensureSpace(35);
+        }
+
+        // Background box for code snippet
+        doc.setFillColor(248, 250, 252);
+        doc.setDrawColor(203, 213, 225);
+        doc.roundedRect(leftMargin, currentY, contentWidth, totalCodeHeight, 1.5, 1.5, 'FD');
+
+        // Left accent bar
+        doc.setFillColor(0, 128, 55);
+        doc.rect(leftMargin, currentY, 1.5, totalCodeHeight, 'F');
+
+        // Language tag if available
+        if (block.language && block.language.toLowerCase() !== 'code') {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(7);
+          doc.setTextColor(100, 116, 139);
+          doc.text(block.language.toUpperCase(), pageWidth - rightMargin - 3, currentY + 4, { align: 'right' });
+        }
+
+        // Print code lines with monospace Courier font
+        doc.setFont('courier', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(15, 23, 42);
+
+        let codeY = currentY + codePadding + 3;
+        codeLines.forEach((line) => {
+          if (codeY > pageHeight - bottomMargin) {
+            doc.addPage();
+            drawPageHeaderAndFooter(false);
+            codeY = topMargin + 4;
+            currentY = topMargin;
+          }
+          // Courier font guarantees that indentation (spaces) renders with exact column alignment
+          // Maximum printable characters before margin is ~92 chars
+          const maxChars = 92;
+          const displayLine = line.length > maxChars ? line.substring(0, maxChars - 3) + '...' : line;
+          doc.text(displayLine, leftMargin + 4, codeY);
+          codeY += codeLineHeight;
+        });
+
+        currentY += totalCodeHeight + 3;
+      } else {
+        // Prose text block
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9.5);
+        doc.setTextColor(15, 23, 42);
+
+        const lines = block.content.split('\n');
+        lines.forEach((line) => {
+          if (!line.trim()) {
+            currentY += 2;
+            return;
+          }
+          const wrapped = doc.splitTextToSize(line, contentWidth);
+          ensureSpace(wrapped.length * 4.2);
+          doc.text(wrapped, leftMargin, currentY);
+          currentY += wrapped.length * 4.2;
+        });
+        currentY += 1.5;
+      }
+    });
+
+    currentY += 1;
+
+    // Options rendering
+    const optLabels = ['A', 'B', 'C', 'D'];
+    const activeOptions = (q.type === 'true-false' ? q.options.slice(0, 2) : q.options);
+
+    activeOptions.forEach((optText, optIdx) => {
+      const isCorrect = q.correctAnswer === optIdx;
+      const label = optLabels[optIdx];
+      const fallback = q.type === 'true-false' ? (optIdx === 0 ? 'True' : 'False') : `Option ${label}`;
+      const displayText = optText.trim() || fallback;
+
+      ensureSpace(7);
+
+      // Option background if correct and showAnswers
+      if (showAnswers && isCorrect) {
+        doc.setFillColor(236, 253, 245);
+        doc.setDrawColor(167, 243, 208);
+        doc.roundedRect(leftMargin + 2, currentY - 3.5, contentWidth - 4, 6.5, 1, 1, 'FD');
+      }
+
+      // Option Circle Badge
+      if (showAnswers && isCorrect) {
+        doc.setFillColor(0, 128, 55);
+        doc.circle(leftMargin + 5.5, currentY - 0.2, 2.5, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 255, 255);
+        doc.text(label, leftMargin + 5.5, currentY + 0.6, { align: 'center' });
+      } else {
+        doc.setFillColor(241, 245, 249);
+        doc.setDrawColor(203, 213, 225);
+        doc.circle(leftMargin + 5.5, currentY - 0.2, 2.5, 'FD');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(71, 85, 105);
+        doc.text(label, leftMargin + 5.5, currentY + 0.6, { align: 'center' });
+      }
+
+      // Option Text
+      doc.setFont('helvetica', showAnswers && isCorrect ? 'bold' : 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(showAnswers && isCorrect ? 0 : 30, showAnswers && isCorrect ? 128 : 41, showAnswers && isCorrect ? 55 : 59);
+
+      const wrappedOpt = doc.splitTextToSize(displayText, contentWidth - 28);
+      doc.text(wrappedOpt, leftMargin + 11, currentY);
+
+      if (showAnswers && isCorrect) {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(0, 128, 55);
+        doc.text('[Correct Answer]', pageWidth - rightMargin - 4, currentY, { align: 'right' });
+      }
+
+      currentY += Math.max(6, wrappedOpt.length * 4);
+    });
+
+    currentY += 3;
+
+    // Divider between questions
+    doc.setDrawColor(241, 245, 249);
+    doc.line(leftMargin, currentY, pageWidth - rightMargin, currentY);
+    currentY += 4;
+  });
+
+  // =========================================================================
+  // ANSWER KEY SUMMARY TABLE (at the end)
+  // =========================================================================
+  if (showAnswers && exam.questions.length > 0) {
+    ensureSpace(45);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(0, 128, 55);
+    doc.text('Answer Key Summary', leftMargin, currentY);
+    currentY += 4;
+
+    const keyRows = exam.questions.map((q, idx) => [
+      `Q${idx + 1}`,
+      String.fromCharCode(65 + (q.correctAnswer ?? 0)),
+      (q.options[q.correctAnswer] || '').replace(/\s+/g, ' ').substring(0, 40),
+      `+${q.marks || 1}`,
+      (q.negativeMarks ?? examNegMarks) > 0 ? `-${q.negativeMarks ?? examNegMarks}` : '0',
+      q.section || 'General',
+    ]);
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Question', 'Correct Option', 'Answer Preview', 'Marks', 'Negative', 'Section']],
+      body: keyRows,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [0, 128, 55],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'center',
+      },
+      columnStyles: {
+        0: { cellWidth: 18, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
+        1: { cellWidth: 24, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 8 },
+        2: { cellWidth: 70, fontSize: 7.5 },
+        3: { cellWidth: 16, halign: 'center', fontSize: 7.5 },
+        4: { cellWidth: 18, halign: 'center', fontSize: 7.5 },
+        5: { cellWidth: 36, fontSize: 7.5 },
+      },
+      margin: { left: leftMargin, right: rightMargin },
+      styles: { cellPadding: 1.5, font: 'helvetica' },
+    });
+  }
+
+  // Stamp Page Numbers (Page X of Y) on every page
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth - rightMargin, pageHeight - 9, { align: 'right' });
+  }
+
+  const cleanName = exam.name.replace(/[^a-zA-Z0-9_-]/g, '_');
+  doc.save(`${cleanName}_Question_Paper.pdf`);
 }

@@ -301,8 +301,9 @@ export async function exportExamResultsToExcel(
 
   // Create sheets in required display order
   const dashboardSheet = wb.addWorksheet('Overall Analytics');
-  const studentQuestionsSheet = wb.addWorksheet('Student Questions');
   const resultsSheet = wb.addWorksheet('Results');
+  const studentQuestionsSheet = wb.addWorksheet('Student Questions');
+  const questionPaperSheet = wb.addWorksheet('Question Paper');
 
   // Add consistent branded header to Results sheet
   addBrandedSheetHeader(
@@ -642,8 +643,184 @@ export async function exportExamResultsToExcel(
   dashFooterRow.height = 20;
   dashboardSheet.mergeCells(`A${dashFooterRow.number}:B${dashFooterRow.number}`);
 
+  // ============================================================
+  // SHEET: QUESTION PAPER
+  // ============================================================
+  addQuestionPaperWorksheet(wb, questionPaperSheet, exam, logoBuffer);
+
   // Save the file
   await downloadExcelFile(wb, `${exam.name}_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+/**
+ * Add Question Paper worksheet to an ExcelJS workbook
+ */
+export function addQuestionPaperWorksheet(
+  wb: ExcelJS.Workbook,
+  qpSheet: ExcelJS.Worksheet,
+  exam: Exam,
+  logoBuffer: ArrayBuffer | null
+) {
+  const qpColumnsCount = 13;
+
+  // Branded Header
+  addBrandedSheetHeader(
+    wb,
+    qpSheet,
+    logoBuffer,
+    'ATOM QMS - EXAM QUESTION PAPER & ANSWER KEY',
+    `${exam.name} (${exam.code}) | Total Questions: ${exam.questions.length} | Total Marks: ${exam.questions.reduce((sum, q) => sum + (q.marks || 1), 0)}`,
+    qpColumnsCount
+  );
+
+  // Table Headers
+  const qpHeaders = [
+    'Q#',
+    'Question & Program Code',
+    'Type',
+    'Section',
+    'Reading Passage',
+    'Option A',
+    'Option B',
+    'Option C',
+    'Option D',
+    'Correct Option',
+    'Correct Answer Text',
+    'Marks (+)',
+    'Negative Marks (-)',
+  ];
+
+  const qpHeaderRow = qpSheet.addRow(qpHeaders);
+  qpHeaderRow.eachCell((cell) => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF008037' } };
+    cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FF005A26' } },
+      left: { style: 'thin', color: { argb: 'FF005A26' } },
+      bottom: { style: 'medium', color: { argb: 'FF005A26' } },
+      right: { style: 'thin', color: { argb: 'FF005A26' } },
+    };
+  });
+  qpHeaderRow.height = 28;
+
+  // Question Rows
+  const examNegMarks = exam.settings?.negativeMarks ?? 0;
+
+  exam.questions.forEach((q, idx) => {
+    const qNum = idx + 1;
+    const typeLabel = q.type === 'mcq' ? 'MCQ' : q.type === 'mcq-image' ? 'MCQ + Image' : q.type === 'true-false' ? 'True/False' : 'Reading Comprehension';
+    const optA = q.options[0] || '';
+    const optB = q.options[1] || '';
+    const optC = q.options[2] || '';
+    const optD = q.options[3] || '';
+    const correctLetter = String.fromCharCode(65 + (q.correctAnswer ?? 0));
+    const correctText = q.options[q.correctAnswer] || '';
+    const marks = q.marks || 1;
+    const negMarks = q.negativeMarks ?? examNegMarks;
+
+    const rowData = [
+      `Q${qNum}`,
+      q.text || '',
+      typeLabel,
+      q.section || 'General',
+      q.passage || '',
+      optA,
+      optB,
+      optC,
+      optD,
+      correctLetter,
+      correctText,
+      marks,
+      negMarks > 0 ? `-${negMarks}` : 0,
+    ];
+
+    const row = qpSheet.addRow(rowData);
+    const isZebra = idx % 2 === 1;
+
+    row.eachCell((cell, colNumber) => {
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        right: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+      };
+
+      cell.font = { size: 9.5 };
+      cell.alignment = { vertical: 'top', wrapText: true };
+
+      if (isZebra) {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+      }
+
+      if (colNumber === 1) {
+        cell.font = { bold: true, size: 10, color: { argb: 'FF008037' } };
+        cell.alignment = { horizontal: 'center', vertical: 'top' };
+      } else if (colNumber === 2) {
+        // Question & Code font with exact indentation
+        cell.font = { name: 'Consolas', size: 9.5 };
+        cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+      } else if (colNumber === 3) {
+        cell.alignment = { horizontal: 'center', vertical: 'top' };
+      } else if (colNumber === 10) {
+        cell.font = { bold: true, size: 11, color: { argb: 'FF008037' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E9' } };
+        cell.alignment = { horizontal: 'center', vertical: 'top' };
+      } else if (colNumber === 11) {
+        cell.font = { bold: true, size: 9.5, color: { argb: 'FF00692C' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F8F4' } };
+        cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+      } else if (colNumber === 12 || colNumber === 13) {
+        cell.alignment = { horizontal: 'center', vertical: 'top' };
+      }
+    });
+
+    const lineCount = (q.text || '').split('\n').length;
+    if (lineCount > 1) {
+      row.height = Math.max(24, Math.min(220, lineCount * 14 + 10));
+    }
+  });
+
+  // Column widths
+  qpSheet.columns = [
+    { width: 8 },  // Q#
+    { width: 62 }, // Question & Program Code
+    { width: 15 }, // Type
+    { width: 18 }, // Section
+    { width: 35 }, // Reading Passage
+    { width: 25 }, // Option A
+    { width: 25 }, // Option B
+    { width: 25 }, // Option C
+    { width: 25 }, // Option D
+    { width: 14 }, // Correct Option
+    { width: 28 }, // Correct Answer Text
+    { width: 10 }, // Marks (+)
+    { width: 14 }, // Negative Marks (-)
+  ];
+
+  // Footer
+  qpSheet.addRow([]);
+  const qpFooterRow = qpSheet.addRow(['Powered by ATOM QMS - Exam Question Paper']);
+  qpFooterRow.getCell(1).font = {
+    bold: true,
+    size: 11,
+    italic: true,
+    color: { argb: 'FF008037' },
+  };
+  qpFooterRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+  qpFooterRow.height = 20;
+  qpSheet.mergeCells(qpFooterRow.number, 1, qpFooterRow.number, qpColumnsCount);
+}
+
+/**
+ * Export standalone Exam Question Paper to Excel
+ */
+export async function downloadExamQuestionPaper(exam: Exam) {
+  const wb = new ExcelJS.Workbook();
+  const logoBuffer = await loadLogoImage();
+  const qpSheet = wb.addWorksheet('Question Paper');
+  addQuestionPaperWorksheet(wb, qpSheet, exam, logoBuffer);
+  await downloadExcelFile(wb, `${exam.name}_Question_Paper_${new Date().toISOString().split('T')[0]}.xlsx`);
 }
 
 /**
@@ -741,6 +918,30 @@ export function previewQuestionsFromExcel(file: File): Promise<{ validQuestions:
   });
 }
 
+function getRowValue(row: Record<string, any>, candidateKeys: string[]): string {
+  const normalizedCandidateKeys = candidateKeys.map(k => k.toLowerCase().replace(/[\s_-]+/g, ''));
+  for (const [key, val] of Object.entries(row)) {
+    const cleanKey = key.toLowerCase().replace(/[\s_-]+/g, '');
+    if (normalizedCandidateKeys.includes(cleanKey)) {
+      return val !== null && val !== undefined ? String(val) : '';
+    }
+  }
+  return '';
+}
+
+function cleanCellText(val: any): string {
+  if (val === null || val === undefined) return '';
+  let str = String(val);
+  // Normalize Windows CRLF and Mac CR to standard Unix LF
+  str = str.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // If user typed literal \n instead of pressing Alt+Enter in Excel
+  if (!str.includes('\n') && (str.includes('\\n') || str.includes('\\r\\n'))) {
+    str = str.replace(/\\r\\n/g, '\n').replace(/\\n/g, '\n');
+  }
+  // Trim outer empty lines from very start and end, but strictly preserve line indentation!
+  return str.replace(/^\n+/, '').replace(/\s+$/, '');
+}
+
 function parseQuestionsFromWorkbook(workbook: XLSX.WorkBook): { validQuestions: any[]; invalidRows: { rowNumber: number; reason: string }[] } {
   // Pick the first sheet that looks like a questions sheet.
   const targetSheetName = workbook.SheetNames.find((name) => {
@@ -748,8 +949,8 @@ function parseQuestionsFromWorkbook(workbook: XLSX.WorkBook): { validQuestions: 
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as any[];
     if (!rows.length) return false;
     const sample = rows[0] || {};
-    const keys = Object.keys(sample).map(k => k.toLowerCase());
-    return keys.includes('question') && (keys.includes('option a') || keys.includes('option 1'));
+    const keys = Object.keys(sample).map(k => k.toLowerCase().replace(/[\s_-]+/g, ''));
+    return keys.some(k => k.includes('question')) && (keys.some(k => k.includes('optiona') || k.includes('option1') || k.includes('opt1')));
   }) || workbook.SheetNames[0];
 
   const worksheet = workbook.Sheets[targetSheetName];
@@ -759,20 +960,30 @@ function parseQuestionsFromWorkbook(workbook: XLSX.WorkBook): { validQuestions: 
   const invalidRows: { rowNumber: number; reason: string }[] = [];
 
   jsonData.forEach((row, idx) => {
-    const text = (row.Question || row.question || '').toString().trim();
-    const typeRaw = (row.Type || row.type || 'MCQ').toString().trim().toLowerCase();
-    const type = typeRaw === 'mcq-image' ? 'mcq-image' : typeRaw === 'true-false' ? 'true-false' : typeRaw === 'reading-comprehension' ? 'reading-comprehension' : 'mcq';
-    const options = [
-      (row['Option A'] || row['Option 1'] || '').toString().trim(),
-      (row['Option B'] || row['Option 2'] || '').toString().trim(),
-      (row['Option C'] || row['Option 3'] || '').toString().trim(),
-      (row['Option D'] || row['Option 4'] || '').toString().trim(),
-    ];
+    // Preserve exact question text formatting and indentation
+    const textRaw = getRowValue(row, ['question', 'questiontext', 'problem', 'code']) || (row.Question || row.question || '');
+    const text = cleanCellText(textRaw);
 
-    const correctRaw = (row['Correct Answer'] || row['correct'] || '').toString().trim().toUpperCase();
+    const typeRaw = (getRowValue(row, ['type', 'questiontype']) || row.Type || row.type || 'MCQ').toString().trim().toLowerCase();
+    const type = typeRaw.includes('image') ? 'mcq-image' : typeRaw.includes('true') || typeRaw === 'tf' ? 'true-false' : typeRaw.includes('reading') || typeRaw.includes('comprehension') || typeRaw === 'rc' ? 'reading-comprehension' : 'mcq';
+
+    const optA = cleanCellText(getRowValue(row, ['optiona', 'option1', 'opt1', 'opta', 'a']) || row['Option A'] || row['Option 1'] || '');
+    const optB = cleanCellText(getRowValue(row, ['optionb', 'option2', 'opt2', 'optb', 'b']) || row['Option B'] || row['Option 2'] || '');
+    const optC = cleanCellText(getRowValue(row, ['optionc', 'option3', 'opt3', 'optc', 'c']) || row['Option C'] || row['Option 3'] || '');
+    const optD = cleanCellText(getRowValue(row, ['optiond', 'option4', 'opt4', 'optd', 'd']) || row['Option D'] || row['Option 4'] || '');
+
+    const options = [optA, optB, optC, optD];
+
+    const correctRaw = (getRowValue(row, ['correctanswer', 'correct', 'answer', 'ans']) || row['Correct Answer'] || row['correct'] || '').toString().trim().toUpperCase();
     const numericCandidate = Number(correctRaw);
-    const answerIndex = /^[A-D]$/.test(correctRaw) ? correctRaw.charCodeAt(0) - 65 : numericCandidate;
-    const correctAnswer = Number.isInteger(answerIndex) ? answerIndex : -1;
+    // Support A, B, C, D or 1, 2, 3, 4 or 0, 1, 2, 3
+    let answerIndex = -1;
+    if (/^[A-D]$/.test(correctRaw)) {
+      answerIndex = correctRaw.charCodeAt(0) - 65;
+    } else if (Number.isInteger(numericCandidate)) {
+      answerIndex = numericCandidate >= 1 && numericCandidate <= 4 ? numericCandidate - 1 : numericCandidate;
+    }
+    const correctAnswer = answerIndex >= 0 && answerIndex <= 3 ? answerIndex : -1;
 
     if (!text) {
       invalidRows.push({ rowNumber: idx + 2, reason: 'Question text is empty' });
@@ -780,7 +991,7 @@ function parseQuestionsFromWorkbook(workbook: XLSX.WorkBook): { validQuestions: 
     }
 
     if (correctAnswer < 0 || correctAnswer > 3) {
-      invalidRows.push({ rowNumber: idx + 2, reason: 'Correct Answer must be A/B/C/D or 0-3' });
+      invalidRows.push({ rowNumber: idx + 2, reason: 'Correct Answer must be A/B/C/D or 1-4' });
       return;
     }
 
@@ -789,13 +1000,30 @@ function parseQuestionsFromWorkbook(workbook: XLSX.WorkBook): { validQuestions: 
       return;
     }
 
+    const marksVal = Number(getRowValue(row, ['marks', 'mark', 'score']) || row.Marks || row.marks || 1);
+    const negMarksRaw = getRowValue(row, ['negativemarks', 'negativemark', 'negmarks', 'penalty']);
+    const negativeMarks = negMarksRaw ? Number(negMarksRaw) : null;
+    const section = getRowValue(row, ['section', 'subject', 'category', 'topic']) || row.Section || row.section || undefined;
+    const passage = cleanCellText(getRowValue(row, ['passage', 'readingpassage', 'comprehension']) || row.Passage || row.passage || '');
+    const imageUrl = getRowValue(row, ['imageurl', 'image', 'questionimage']) || row['Image URL'] || undefined;
+
+    const optAImage = getRowValue(row, ['optionaimage', 'option1image', 'imagea']) || row['Option A Image'] || '';
+    const optBImage = getRowValue(row, ['optionbimage', 'option2image', 'imageb']) || row['Option B Image'] || '';
+    const optCImage = getRowValue(row, ['optioncimage', 'option3image', 'imagec']) || row['Option C Image'] || '';
+    const optDImage = getRowValue(row, ['optiondimage', 'option4image', 'imaged']) || row['Option D Image'] || '';
+    const hasOptionImages = Boolean(optAImage || optBImage || optCImage || optDImage);
+
     validQuestions.push({
       text,
       type,
       options,
       correctAnswer,
-      marks: Number(row.Marks || row.marks || 1),
-      section: row.Section || row.section || undefined,
+      marks: isNaN(marksVal) || marksVal <= 0 ? 1 : marksVal,
+      negativeMarks: negativeMarks !== null && !isNaN(negativeMarks) ? negativeMarks : null,
+      section: section ? section.trim() : undefined,
+      passage: passage || undefined,
+      imageUrl: imageUrl ? imageUrl.trim() : undefined,
+      optionImages: hasOptionImages ? [optAImage, optBImage, optCImage, optDImage] : undefined,
     });
   });
 
@@ -868,6 +1096,33 @@ export function downloadQuestionsTemplate() {
       'Correct Answer': 'B',
       Marks: 1,
       Section: 'Mathematics',
+    },
+    {
+      Question: `What will be the output of the following C program?
+
+#include <stdio.h>
+int main() {
+    int a = 10;
+    int b = 20;
+    if (a < b) {
+        printf("%d", a + b);
+    }
+    return 0;
+}`,
+      Type: 'MCQ',
+      Passage: '',
+      'Option A': '10',
+      'Option B': '20',
+      'Option C': '30',
+      'Option D': 'Compilation Error',
+      'Image URL': '',
+      'Option A Image': '',
+      'Option B Image': '',
+      'Option C Image': '',
+      'Option D Image': '',
+      'Correct Answer': 'C',
+      Marks: 2,
+      Section: 'Programming / C',
     },
     {
       Question: 'Which graph shows the function y=2x?',

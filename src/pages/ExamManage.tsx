@@ -4,6 +4,7 @@ import { getAdminSession, getExam, getExams, getExamByCode, addQuestion, updateQ
 import { Exam, ExamResult, Candidate, ExamAttempt } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -13,12 +14,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { toast } from 'sonner';
 import { ImageUploadInput } from '@/components/ImageUploadInput';
 import { exportExamResultsToExcel, previewQuestionsFromExcel, downloadQuestionsTemplate } from '@/lib/excelUtils';
-import { exportExamDetailedPdfReport, ComparisonExamData } from '@/lib/pdfUtils';
+import { exportExamDetailedPdfReport, ComparisonExamData, exportQuestionPaperPdf } from '@/lib/pdfUtils';
 import { formatExamScheduleDateTime } from '@/lib/dateUtils';
 import Header from '@/components/Header';
 import { ExamResults3DAnalytics } from '@/components/ExamResults3DAnalytics';
 import DeviceBadge from '@/components/DeviceBadge';
 import LiveExamMonitor from '@/components/LiveExamMonitor';
+import { FormattedQuestionText, FormattedOptionText } from '@/components/FormattedQuestionText';
 
 const ExamManage = () => {
   const { id } = useParams<{ id: string }>();
@@ -676,11 +678,13 @@ const ExamManage = () => {
             q.text,
             q.options,
             q.correctAnswer,
-            undefined,
-            undefined,
+            q.imageUrl,
+            q.optionImages,
             q.marks || 1,
-            null,
-            q.section
+            q.negativeMarks ?? null,
+            q.section,
+            q.passage,
+            q.passageGroupId
           );
           if (created) {
             successCount++;
@@ -808,7 +812,7 @@ const ExamManage = () => {
             </TabsList>
 
             {activeTab === 'questions' && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   size="sm"
                   onClick={() => questionFileRef.current?.click()}
@@ -847,6 +851,28 @@ const ExamManage = () => {
                   className="bg-primary text-white hover:bg-primary/90 shadow-sm"
                 >
                   <Download className="mr-1.5 h-4 w-4" /> Export Excel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    if (!exam || exam.questions.length === 0) {
+                      toast.error('No questions available in this exam');
+                      return;
+                    }
+                    const toastId = toast.loading('Generating Question Paper PDF...');
+                    try {
+                      await exportQuestionPaperPdf(exam);
+                      toast.success('Question Paper PDF downloaded successfully!', { id: toastId });
+                    } catch (e: any) {
+                      toast.error('Failed to download Question Paper: ' + e.message, { id: toastId });
+                    }
+                  }}
+                  disabled={!exam || exam.questions.length === 0}
+                  className="bg-[#008037] text-white hover:bg-black shadow-sm font-bold flex items-center gap-1.5"
+                  title="Download Question Paper as PDF"
+                >
+                  <FileText className="h-4 w-4 text-white" />
+                  <span>Download Question Paper (PDF)</span>
                 </Button>
                 <Button
                   size="sm"
@@ -920,22 +946,26 @@ const ExamManage = () => {
                     )}
 
                     <div className="space-y-2">
-                      <p className="text-sm font-semibold">Sample Valid Questions</p>
-                      <div className="max-h-48 overflow-y-auto rounded border">
+                      <p className="text-sm font-semibold">Sample Valid Questions Preview</p>
+                      <div className="max-h-64 overflow-y-auto rounded border">
                         <table className="w-full text-sm">
-                          <thead className="bg-muted">
+                          <thead className="bg-muted sticky top-0">
                             <tr>
-                              <th className="px-3 py-2 text-left">Question</th>
-                              <th className="px-3 py-2 text-left">Type</th>
-                              <th className="px-3 py-2 text-left">Correct</th>
+                              <th className="px-3 py-2 text-left w-12">#</th>
+                              <th className="px-3 py-2 text-left">Question & Code (Exact Alignment)</th>
+                              <th className="px-3 py-2 text-left w-24">Type</th>
+                              <th className="px-3 py-2 text-left w-20">Correct</th>
                             </tr>
                           </thead>
                           <tbody>
                             {previewQuestions.slice(0, 10).map((q, i) => (
-                              <tr key={`preview-${i}`} className="border-t">
-                                <td className="px-3 py-2">{q.text}</td>
-                                <td className="px-3 py-2">{q.type}</td>
-                                <td className="px-3 py-2">{String.fromCharCode(65 + q.correctAnswer)}</td>
+                              <tr key={`preview-${i}`} className="border-t align-top">
+                                <td className="px-3 py-2 text-muted-foreground font-mono text-xs">{i + 1}</td>
+                                <td className="px-3 py-2 max-w-xl">
+                                  <FormattedQuestionText text={q.text} compact={true} showCopyButton={false} />
+                                </td>
+                                <td className="px-3 py-2 text-xs">{q.type}</td>
+                                <td className="px-3 py-2 text-xs font-semibold">{String.fromCharCode(65 + q.correctAnswer)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1031,8 +1061,18 @@ const ExamManage = () => {
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Label>{questionType === 'reading-comprehension' ? 'Question (about the passage)' : 'Question Text'}</Label>
-                        <Input placeholder={questionType === 'reading-comprehension' ? "e.g., Which of the following..." : "Enter question text"} value={questionText} onChange={e => setQuestionText(e.target.value)} required />
+                        <Label>{questionType === 'reading-comprehension' ? 'Question (about the passage)' : 'Question Text / Program Code'}</Label>
+                        <Textarea
+                          placeholder={questionType === 'reading-comprehension' ? "e.g., Which of the following..." : "Enter question text or paste program code (line breaks, spaces, and indentation will be preserved)..."}
+                          value={questionText}
+                          onChange={e => setQuestionText(e.target.value)}
+                          rows={4}
+                          className="font-mono text-sm leading-relaxed"
+                          required
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          💡 Line breaks and code indentation (spaces/tabs) will be preserved with exact alignment.
+                        </p>
                       </div>
                       {questionType === 'reading-comprehension' && (
                         <div className="space-y-3 border border-border rounded p-3">
@@ -1209,18 +1249,21 @@ const ExamManage = () => {
 
                     {/* Question Text */}
                     <div className="space-y-1">
-                      <p className="text-base font-medium text-foreground leading-relaxed">
-                        <span className="font-bold text-primary mr-1">
-                          Q{isEditing ? (getEditingQuestionNumber() ?? (exam?.questions.length ?? 0) + 1) : ((exam?.questions.length ?? 0) + 1)}.
-                        </span>{' '}
-                        {questionText.trim() ? (
-                          questionText
-                        ) : (
+                      {questionText.trim() ? (
+                        <FormattedQuestionText
+                          text={questionText}
+                          qNumber={isEditing ? (getEditingQuestionNumber() ?? (exam?.questions.length ?? 0) + 1) : ((exam?.questions.length ?? 0) + 1)}
+                        />
+                      ) : (
+                        <p className="text-base font-medium text-foreground leading-relaxed">
+                          <span className="font-bold text-primary mr-1">
+                            Q{isEditing ? (getEditingQuestionNumber() ?? (exam?.questions.length ?? 0) + 1) : ((exam?.questions.length ?? 0) + 1)}.
+                          </span>{' '}
                           <span className="text-muted-foreground italic font-normal">
                             Question text will appear here as you type...
                           </span>
-                        )}
-                      </p>
+                        </p>
+                      )}
                     </div>
 
                     {/* Question Image Preview */}
@@ -1268,9 +1311,13 @@ const ExamManage = () => {
                                     {optionLabel}
                                   </div>
                                   <div className="flex-1 text-sm">
-                                    <span className={isCorrect ? 'font-semibold text-emerald-950 dark:text-emerald-100' : 'text-foreground'}>
-                                      {opt.trim() || <span className="text-muted-foreground italic">{fallbackText}</span>}
-                                    </span>
+                                    <div className={isCorrect ? 'font-semibold text-emerald-950 dark:text-emerald-100' : 'text-foreground'}>
+                                      {opt.trim() ? (
+                                        <FormattedOptionText text={opt} />
+                                      ) : (
+                                        <span className="text-muted-foreground italic">{fallbackText}</span>
+                                      )}
+                                    </div>
                                     {questionType === 'mcq-image' && optionImageSrc && (
                                       <div className="mt-2">
                                         <img
@@ -1308,7 +1355,7 @@ const ExamManage = () => {
 
                 {/* Questions in Exam List Header & Content */}
                 <div className="space-y-4 pt-2">
-                  <div className="flex items-center justify-between border-b pb-3">
+                  <div className="flex items-center justify-between border-b pb-3 flex-wrap gap-2">
                     <div>
                       <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
                         Questions in Exam
@@ -1316,6 +1363,25 @@ const ExamManage = () => {
                       </h3>
                       <p className="text-xs text-muted-foreground">All questions currently assigned to this examination</p>
                     </div>
+                    {exam.questions.length > 0 && (
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          const toastId = toast.loading('Generating Question Paper PDF...');
+                          try {
+                            await exportQuestionPaperPdf(exam);
+                            toast.success('Question Paper PDF downloaded successfully!', { id: toastId });
+                          } catch (e: any) {
+                            toast.error('Failed to download Question Paper: ' + e.message, { id: toastId });
+                          }
+                        }}
+                        className="bg-[#008037] text-white hover:bg-black font-bold gap-1.5 shadow-sm"
+                        title="Download Question Paper as PDF"
+                      >
+                        <FileText className="h-4 w-4 text-white" />
+                        <span>Download PDF</span>
+                      </Button>
+                    )}
                   </div>
 
                   {exam.questions.length === 0 ? (
@@ -1380,16 +1446,24 @@ const ExamManage = () => {
                                         <div key={q.id} className={passageQIdx > 0 ? 'border-t pt-4' : ''}>
                                           <div className="flex items-start justify-between">
                                             <div className="flex-1">
-                                              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                                <p className="font-medium">Q{qNum}. {q.text}</p>
-                                                <Badge variant="outline" className="text-xs">Reading Comprehension</Badge>
-                                                <Badge variant="secondary" className="text-xs">{q.marks} mark{q.marks !== 1 ? 's' : ''}</Badge>
-                                                <Badge variant="secondary" className="text-xs">-{q.negativeMarks ?? exam.settings?.negativeMarks ?? 0} neg</Badge>
+                                              <div className="space-y-1 mb-2">
+                                                <FormattedQuestionText text={q.text} qNumber={qNum} />
+                                                <div className="flex items-center gap-2 flex-wrap pt-1">
+                                                  <Badge variant="outline" className="text-xs">Reading Comprehension</Badge>
+                                                  <Badge variant="secondary" className="text-xs">{q.marks} mark{q.marks !== 1 ? 's' : ''}</Badge>
+                                                  <Badge variant="secondary" className="text-xs">-{q.negativeMarks ?? exam.settings?.negativeMarks ?? 0} neg</Badge>
+                                                </div>
                                               </div>
-                                              <div className="grid gap-1 sm:grid-cols-2 mt-2">
+                                              <div className="grid gap-2 sm:grid-cols-2 mt-2">
                                                 {q.options.map((opt, j) => (
-                                                  <div key={j} className={`text-sm ${j === q.correctAnswer ? 'font-semibold text-success' : 'text-muted-foreground'}`}>
-                                                    <p>{String.fromCharCode(65 + j)}. {opt} {j === q.correctAnswer ? '(Correct)' : ''}</p>
+                                                  <div key={j} className={`text-sm p-2 rounded border ${j === q.correctAnswer ? 'font-semibold text-success border-success/40 bg-success/5' : 'text-muted-foreground border-border/50'}`}>
+                                                    <div className="flex items-start gap-1.5">
+                                                      <span className="font-bold shrink-0">{String.fromCharCode(65 + j)}.</span>
+                                                      <div className="flex-1 min-w-0">
+                                                        <FormattedOptionText text={opt} />
+                                                        {j === q.correctAnswer && <span className="text-xs font-bold text-success block mt-0.5">(Correct)</span>}
+                                                      </div>
+                                                    </div>
                                                   </div>
                                                 ))}
                                               </div>
@@ -1420,20 +1494,28 @@ const ExamManage = () => {
                                 <CardContent className="pt-6">
                                   <div className="flex items-start justify-between">
                                     <div className="flex-1">
-                                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                        <p className="font-medium">Q{qNum}. {q.text}</p>
-                                        <Badge variant="outline" className="text-xs">
-                                          {q.type === 'mcq' ? 'MCQ' : q.type === 'mcq-image' ? 'MCQ + Image' : q.type === 'true-false' ? 'True/False' : 'Reading Comprehension'}
-                                        </Badge>
-                                        <Badge variant="secondary" className="text-xs">{q.marks} mark{q.marks !== 1 ? 's' : ''}</Badge>
-                                        <Badge variant="secondary" className="text-xs">-{q.negativeMarks ?? exam.settings?.negativeMarks ?? 0} neg</Badge>
+                                      <div className="space-y-1 mb-2">
+                                        <FormattedQuestionText text={q.text} qNumber={qNum} />
+                                        <div className="flex items-center gap-2 flex-wrap pt-1">
+                                          <Badge variant="outline" className="text-xs">
+                                            {q.type === 'mcq' ? 'MCQ' : q.type === 'mcq-image' ? 'MCQ + Image' : q.type === 'true-false' ? 'True/False' : 'Reading Comprehension'}
+                                          </Badge>
+                                          <Badge variant="secondary" className="text-xs">{q.marks} mark{q.marks !== 1 ? 's' : ''}</Badge>
+                                          <Badge variant="secondary" className="text-xs">-{q.negativeMarks ?? exam.settings?.negativeMarks ?? 0} neg</Badge>
+                                        </div>
                                       </div>
                                       {q.imageUrl && <img src={q.imageUrl} alt="Question" className="mt-2 h-32 w-auto rounded border" />}
                                       {q.type !== 'reading-comprehension' && (
-                                        <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                                        <div className="mt-2 grid gap-2 sm:grid-cols-2">
                                           {q.options.map((opt, j) => (
-                                            <div key={j} className={`text-sm ${j === q.correctAnswer ? 'font-semibold text-success' : 'text-muted-foreground'}`}>
-                                              <p>{String.fromCharCode(65 + j)}. {opt} {j === q.correctAnswer ? '(Correct)' : ''}</p>
+                                            <div key={j} className={`text-sm p-2 rounded border ${j === q.correctAnswer ? 'font-semibold text-success border-success/40 bg-success/5' : 'text-muted-foreground border-border/50'}`}>
+                                              <div className="flex items-start gap-1.5">
+                                                <span className="font-bold shrink-0">{String.fromCharCode(65 + j)}.</span>
+                                                <div className="flex-1 min-w-0">
+                                                  <FormattedOptionText text={opt} />
+                                                  {j === q.correctAnswer && <span className="text-xs font-bold text-success block mt-0.5">(Correct)</span>}
+                                                </div>
+                                              </div>
                                               {q.optionImages?.[j] && <img src={q.optionImages[j]} alt={`Option ${String.fromCharCode(65 + j)}`} className="mt-1 h-20 w-auto rounded" />}
                                             </div>
                                           ))}
@@ -1446,11 +1528,17 @@ const ExamManage = () => {
                                             <p className="text-muted-foreground whitespace-pre-wrap">{q.passage}</p>
                                           </div>
                                           <div className="space-y-2">
-                                            <p className="font-medium text-sm">{q.text}</p>
-                                            <div className="grid gap-1 sm:grid-cols-2">
+                                            <FormattedQuestionText text={q.text} />
+                                            <div className="grid gap-2 sm:grid-cols-2">
                                               {q.options.map((opt, j) => (
-                                                <div key={j} className={`text-sm ${j === q.correctAnswer ? 'font-semibold text-success' : 'text-muted-foreground'}`}>
-                                                  <p>{String.fromCharCode(65 + j)}. {opt} {j === q.correctAnswer ? '(Correct)' : ''}</p>
+                                                <div key={j} className={`text-sm p-2 rounded border ${j === q.correctAnswer ? 'font-semibold text-success border-success/40 bg-success/5' : 'text-muted-foreground border-border/50'}`}>
+                                                  <div className="flex items-start gap-1.5">
+                                                    <span className="font-bold shrink-0">{String.fromCharCode(65 + j)}.</span>
+                                                    <div className="flex-1 min-w-0">
+                                                      <FormattedOptionText text={opt} />
+                                                      {j === q.correctAnswer && <span className="text-xs font-bold text-success block mt-0.5">(Correct)</span>}
+                                                    </div>
+                                                  </div>
                                                 </div>
                                               ))}
                                             </div>
@@ -1536,6 +1624,29 @@ const ExamManage = () => {
 
                     {/* View Switcher Toggle & Page Size */}
                     <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto shrink-0">
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          if (!exam || exam.questions.length === 0) {
+                            toast.error('No questions available in this exam');
+                            return;
+                          }
+                          const toastId = toast.loading('Generating Question Paper PDF...');
+                          try {
+                            await exportQuestionPaperPdf(exam);
+                            toast.success('Question Paper PDF downloaded successfully!', { id: toastId });
+                          } catch (e: any) {
+                            toast.error('Failed to download Question Paper: ' + e.message, { id: toastId });
+                          }
+                        }}
+                        disabled={!exam || exam.questions.length === 0}
+                        className="h-8 text-xs bg-[#008037] text-white hover:bg-black font-bold flex items-center gap-1.5 rounded-xl cursor-pointer shadow-sm"
+                        title="Download Question Paper as PDF"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-white" />
+                        <span>Download QP (PDF)</span>
+                      </Button>
+
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-emerald-50/70 border border-emerald-200 px-2.5 py-1 rounded-xl">
                         <span className="font-semibold text-emerald-950">Show:</span>
                         <select
@@ -2294,7 +2405,37 @@ const ExamManage = () => {
                   </div>
                 </div>
 
-                  {/* Action Buttons */}
+                {/* Question Paper PDF Notice */}
+                <div className="p-3 bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs text-emerald-900 dark:text-emerald-200 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
+                    <span>
+                      <strong>Question Paper (PDF):</strong> Complete Question Paper with preserved indentation, code formatting, options, and answer key in PDF format.
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={async () => {
+                      if (!exam || exam.questions.length === 0) {
+                        toast.error('No questions available in this exam');
+                        return;
+                      }
+                      const toastId = toast.loading('Generating Question Paper PDF...');
+                      try {
+                        await exportQuestionPaperPdf(exam);
+                        toast.success('Question Paper PDF downloaded successfully!', { id: toastId });
+                      } catch (e: any) {
+                        toast.error('Failed to download Question Paper: ' + e.message, { id: toastId });
+                      }
+                    }}
+                    className="shrink-0 text-xs bg-[#008037] text-white hover:bg-black font-bold"
+                  >
+                    <Download className="h-3 w-3 mr-1 text-white" /> Download QP (PDF)
+                  </Button>
+                </div>
+
+                {/* Action Buttons */}
                   <div className="flex flex-wrap gap-2 justify-end pt-4 border-t">
                     <Button
                       variant="outline"
@@ -2590,6 +2731,28 @@ const ExamManage = () => {
               </div>
               <div className="flex items-center gap-2.5 ml-auto">
                 <Button
+                  type="button"
+                  onClick={async () => {
+                    if (!exam || exam.questions.length === 0) {
+                      toast.error('No questions available in this exam');
+                      return;
+                    }
+                    const toastId = toast.loading('Generating Question Paper PDF...');
+                    try {
+                      await exportQuestionPaperPdf(exam);
+                      toast.success('Question Paper PDF downloaded successfully!', { id: toastId });
+                    } catch (e: any) {
+                      toast.error('Failed to download Question Paper: ' + e.message, { id: toastId });
+                    }
+                  }}
+                  disabled={!exam || exam.questions.length === 0}
+                  className="text-xs h-9 px-3 bg-[#008037] text-white hover:bg-black font-bold gap-1.5 shadow-sm"
+                  title="Download Question Paper as PDF"
+                >
+                  <FileText className="h-4 w-4 text-white" />
+                  Download QP (PDF)
+                </Button>
+                <Button
                   variant="outline"
                   onClick={() => setShowPdfExportDialog(false)}
                   className="text-xs h-9 px-4"
@@ -2751,9 +2914,9 @@ const ExamManage = () => {
                           )}
 
                           {/* Question Text */}
-                          <p className="text-sm font-medium text-gray-900 mb-3 whitespace-pre-wrap">
-                            {q.text}
-                          </p>
+                          <div className="mb-3">
+                            <FormattedQuestionText text={q.text} />
+                          </div>
 
                           {/* Question Image if present */}
                           {q.imageUrl && (
@@ -2797,7 +2960,7 @@ const ExamManage = () => {
                                   </span>
 
                                   <div className="flex-1 min-w-0">
-                                    <p className="break-words">{opt}</p>
+                                    <FormattedOptionText text={opt} />
                                     {q.optionImages && q.optionImages[oIdx] && (
                                       <img
                                         src={q.optionImages[oIdx]}
