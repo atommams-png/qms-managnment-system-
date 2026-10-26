@@ -174,16 +174,6 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen pt-4 bg-background">
       <Header title="Admin Portal">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refresh(true)}
-          disabled={isRefreshing}
-          className="hidden sm:inline-flex"
-          title="Refresh dashboard data"
-        >
-          <RefreshCw className={`mr-1.5 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
-        </Button>
         <Button onClick={() => navigate('/admin/create-exam')} size="sm">
           <Plus className="mr-1.5 h-4 w-4" /> New Exam
         </Button>

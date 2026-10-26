@@ -312,7 +312,7 @@ export async function exportExamResultsToExcel(
     logoBuffer,
     'ATOM QMS - EXAM RESULTS',
     'Candidate Performance Report',
-    14
+    16
   );
 
   // ============================================================
@@ -420,7 +420,7 @@ export async function exportExamResultsToExcel(
   };
   footerRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
   footerRow.height = 20;
-  resultsSheet.mergeCells(`A${footerRow.number}:O${footerRow.number}`);
+  resultsSheet.mergeCells(`A${footerRow.number}:P${footerRow.number}`);
 
   // ============================================================
   // SHEET 2: STUDENT QUESTIONS
@@ -526,7 +526,8 @@ export async function exportExamResultsToExcel(
     const row = studentQuestionsSheet.addRow(rowData);
 
     // Color code question status columns
-    const statusStartIndex = 10;
+    // rowData has 12 metadata columns before questions (indices 0..11), so questions start at index 12
+    const statusStartIndex = 12;
     for (let i = statusStartIndex; i < statusStartIndex + exam.questions.length; i++) {
       const cellValue = rowData[i];
       let bgColor = 'FFFFFFFF';
@@ -547,8 +548,13 @@ export async function exportExamResultsToExcel(
       row.getCell(i + 1).alignment = { horizontal: 'center', vertical: 'middle' };
     }
 
-    // Highlight status cell and center key numeric/text columns
-    const statusCell = row.getCell(8);
+    // Align metadata columns (Section, Device, Tab Switches, Started At, Completed At)
+    row.getCell(7).alignment = { horizontal: 'center', vertical: 'middle' }; // Section
+    row.getCell(8).alignment = { horizontal: 'center', vertical: 'middle' }; // Device & Mode
+    row.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' }; // Tab Switches
+
+    // Highlight status cell (Column 10 is 'Status')
+    const statusCell = row.getCell(10);
     if (status === 'Limit Exceeded') {
       statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE0E0' } };
       statusCell.font = { color: { argb: 'FFCC0000' }, bold: true };
@@ -556,23 +562,40 @@ export async function exportExamResultsToExcel(
       statusCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F5E9' } };
       statusCell.font = { color: { argb: 'FF2E7D32' }, bold: true };
     }
+    statusCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    row.getCell(7).alignment = { horizontal: 'center', vertical: 'middle' };
-    row.getCell(8).alignment = { horizontal: 'center', vertical: 'middle' };
+    row.getCell(11).alignment = { horizontal: 'center', vertical: 'middle' }; // Exam Started At
+    row.getCell(12).alignment = { horizontal: 'center', vertical: 'middle' }; // Completed At
 
     const questionTimeStart = statusStartIndex + exam.questions.length;
     for (let i = questionTimeStart; i < questionTimeStart + exam.questions.length; i++) {
       row.getCell(i + 1).alignment = { horizontal: 'center', vertical: 'middle' };
     }
+
+    const summaryStart = questionTimeStart + exam.questions.length;
+    for (let i = summaryStart; i < summaryStart + 3; i++) {
+      row.getCell(i + 1).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(i + 1).font = { bold: true };
+    }
   });
 
   const sqColumns = [
-    { width: 18 }, { width: 22 }, { width: 16 }, { width: 14 },
-    { width: 14 }, { width: 12 }, { width: 12 }, { width: 16 }, { width: 20 }, { width: 20 }
+    { width: 18 }, // Name
+    { width: 22 }, // Email
+    { width: 16 }, // Contact
+    { width: 18 }, // College
+    { width: 14 }, // USN
+    { width: 14 }, // Department
+    { width: 10 }, // Section
+    { width: 18 }, // Device & Mode
+    { width: 14 }, // Tab Switches
+    { width: 16 }, // Status
+    { width: 20 }, // Exam Started At
+    { width: 20 }, // Completed At
   ];
   exam.questions.forEach(() => sqColumns.push({ width: 6 }));
-  exam.questions.forEach(() => sqColumns.push({ width: 10 }));
-  sqColumns.push({ width: 10 }, { width: 10 }, { width: 13 });
+  exam.questions.forEach(() => sqColumns.push({ width: 12 }));
+  sqColumns.push({ width: 10 }, { width: 10 }, { width: 14 });
   studentQuestionsSheet.columns = sqColumns;
 
   // Add footer to Student Questions sheet

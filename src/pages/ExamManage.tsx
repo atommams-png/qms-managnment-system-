@@ -13,7 +13,7 @@ import { ArrowLeft, Plus, Trash2, Download, Copy, Edit, Settings, Upload, FileTe
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { ImageUploadInput } from '@/components/ImageUploadInput';
-import { exportExamResultsToExcel, previewQuestionsFromExcel, downloadQuestionsTemplate } from '@/lib/excelUtils';
+import { exportExamResultsToExcel, previewQuestionsFromExcel, downloadQuestionsTemplate, downloadExamQuestionPaper } from '@/lib/excelUtils';
 import { exportExamDetailedPdfReport, ComparisonExamData, exportQuestionPaperPdf } from '@/lib/pdfUtils';
 import { formatExamScheduleDateTime } from '@/lib/dateUtils';
 import Header from '@/components/Header';
@@ -985,8 +985,8 @@ const ExamManage = () => {
             )}
             {/* 2-Column Authoring Section: Form on Left, Preview + Questions on Right */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Left Column: Form (5 cols on lg, sticky) */}
-              <div ref={formSectionRef} className="lg:col-span-5 space-y-4 lg:sticky lg:top-6">
+              {/* Left Column: Form (5 cols on lg) */}
+              <div ref={formSectionRef} className="lg:col-span-5 space-y-4">
                 <Card className={`transition-all shadow-sm ${isEditing ? 'border-amber-400 dark:border-amber-600 ring-1 ring-amber-400/30' : 'border-border'}`}>
                   <CardHeader className={`${isEditing ? 'bg-amber-50/50 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800/50' : 'bg-muted/40 border-b'} pb-3`}>
                     <div className="flex items-center justify-between">
@@ -1364,23 +1364,42 @@ const ExamManage = () => {
                       <p className="text-xs text-muted-foreground">All questions currently assigned to this examination</p>
                     </div>
                     {exam.questions.length > 0 && (
-                      <Button
-                        size="sm"
-                        onClick={async () => {
-                          const toastId = toast.loading('Generating Question Paper PDF...');
-                          try {
-                            await exportQuestionPaperPdf(exam);
-                            toast.success('Question Paper PDF downloaded successfully!', { id: toastId });
-                          } catch (e: any) {
-                            toast.error('Failed to download Question Paper: ' + e.message, { id: toastId });
-                          }
-                        }}
-                        className="bg-[#008037] text-white hover:bg-black font-bold gap-1.5 shadow-sm"
-                        title="Download Question Paper as PDF"
-                      >
-                        <FileText className="h-4 w-4 text-white" />
-                        <span>Download PDF</span>
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            const toastId = toast.loading('Generating Question Paper PDF...');
+                            try {
+                              await exportQuestionPaperPdf(exam);
+                              toast.success('Question Paper PDF downloaded successfully!', { id: toastId });
+                            } catch (e: any) {
+                              toast.error('Failed to download Question Paper: ' + e.message, { id: toastId });
+                            }
+                          }}
+                          className="bg-[#008037] text-white hover:bg-black font-bold gap-1.5 shadow-sm"
+                          title="Download Question Paper as PDF"
+                        >
+                          <FileText className="h-4 w-4 text-white" />
+                          <span>Download PDF</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            const toastId = toast.loading('Generating Question Paper Excel...');
+                            try {
+                              await downloadExamQuestionPaper(exam);
+                              toast.success('Question Paper Excel downloaded successfully!', { id: toastId });
+                            } catch (e: any) {
+                              toast.error('Failed to download Question Paper Excel: ' + e.message, { id: toastId });
+                            }
+                          }}
+                          className="bg-[#008037] text-white hover:bg-black font-bold gap-1.5 shadow-sm"
+                          title="Download Question Paper as Excel (.xlsx)"
+                        >
+                          <Download className="h-4 w-4 text-white" />
+                          <span>Download Excel</span>
+                        </Button>
+                      </div>
                     )}
                   </div>
 
@@ -1624,29 +1643,6 @@ const ExamManage = () => {
 
                     {/* View Switcher Toggle & Page Size */}
                     <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto shrink-0">
-                      <Button
-                        size="sm"
-                        onClick={async () => {
-                          if (!exam || exam.questions.length === 0) {
-                            toast.error('No questions available in this exam');
-                            return;
-                          }
-                          const toastId = toast.loading('Generating Question Paper PDF...');
-                          try {
-                            await exportQuestionPaperPdf(exam);
-                            toast.success('Question Paper PDF downloaded successfully!', { id: toastId });
-                          } catch (e: any) {
-                            toast.error('Failed to download Question Paper: ' + e.message, { id: toastId });
-                          }
-                        }}
-                        disabled={!exam || exam.questions.length === 0}
-                        className="h-8 text-xs bg-[#008037] text-white hover:bg-black font-bold flex items-center gap-1.5 rounded-xl cursor-pointer shadow-sm"
-                        title="Download Question Paper as PDF"
-                      >
-                        <FileText className="h-3.5 w-3.5 text-white" />
-                        <span>Download QP (PDF)</span>
-                      </Button>
-
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-emerald-50/70 border border-emerald-200 px-2.5 py-1 rounded-xl">
                         <span className="font-semibold text-emerald-950">Show:</span>
                         <select
@@ -2730,28 +2726,6 @@ const ExamManage = () => {
                 )}
               </div>
               <div className="flex items-center gap-2.5 ml-auto">
-                <Button
-                  type="button"
-                  onClick={async () => {
-                    if (!exam || exam.questions.length === 0) {
-                      toast.error('No questions available in this exam');
-                      return;
-                    }
-                    const toastId = toast.loading('Generating Question Paper PDF...');
-                    try {
-                      await exportQuestionPaperPdf(exam);
-                      toast.success('Question Paper PDF downloaded successfully!', { id: toastId });
-                    } catch (e: any) {
-                      toast.error('Failed to download Question Paper: ' + e.message, { id: toastId });
-                    }
-                  }}
-                  disabled={!exam || exam.questions.length === 0}
-                  className="text-xs h-9 px-3 bg-[#008037] text-white hover:bg-black font-bold gap-1.5 shadow-sm"
-                  title="Download Question Paper as PDF"
-                >
-                  <FileText className="h-4 w-4 text-white" />
-                  Download QP (PDF)
-                </Button>
                 <Button
                   variant="outline"
                   onClick={() => setShowPdfExportDialog(false)}

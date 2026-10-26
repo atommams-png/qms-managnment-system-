@@ -36,24 +36,6 @@ function formatPct(val: any): string {
   return Number.isInteger(num) ? `${num}%` : `${num.toFixed(1)}%`;
 }
 
-// Helper: Convert template background image to base64 Data URL
-async function getTemplateBgDataUrl(): Promise<string | null> {
-  try {
-    const response = await fetch('/atom_template_clean_bg.png');
-    if (!response.ok) return null;
-    const blob = await response.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch (err) {
-    console.warn('Could not load template background for PDF report:', err);
-    return null;
-  }
-}
-
 // Helper: Convert logo image to base64 Data URL
 async function getLogoDataUrl(): Promise<string | null> {
   try {
@@ -226,177 +208,65 @@ function draw3DDonutOnCanvas(
   });
 }
 
-/**
- * Chart: ATOM Page 1 Executive Overview Dual-Panel (Pass vs. Fail 3D Donut + Score Benchmark 3D Bars)
- */
-function createAtomExecutiveOverviewCharts(
-  passedCount: number,
-  failedCount: number,
-  passRate: number,
-  highestPct: number,
-  avgPct: number,
-  lowestPct: number
-): string {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1600;
-  canvas.height = 680;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return '';
+function generateChartHeader(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  title: string,
+  subtitle: string
+) {
+  const headerGrad = ctx.createLinearGradient(0, 0, width, 0);
+  headerGrad.addColorStop(0, '#064e3b');
+  headerGrad.addColorStop(0.5, '#008037');
+  headerGrad.addColorStop(1, '#10b981');
+  ctx.fillStyle = headerGrad;
+  ctx.fillRect(0, 0, width, 14);
 
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 30px Century Gothic';
+  ctx.textAlign = 'left';
+  ctx.fillText(title, 40, 60);
 
-  const total = passedCount + failedCount;
-  const failRate = total > 0 ? Math.max(0, 100 - passRate) : 0;
+  ctx.fillStyle = '#059669';
+  ctx.font = 'bold 18px Century Gothic';
+  ctx.fillText(subtitle, 40, 92);
 
-  // Outer subtle border card
-  ctx.save();
   ctx.strokeStyle = '#e2e8f0';
   ctx.lineWidth = 2;
-  ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
-
-  // Vertical divider between panels
-  ctx.strokeStyle = '#e2e8f0';
-  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(canvas.width / 2, 20);
-  ctx.lineTo(canvas.width / 2, canvas.height - 20);
+  ctx.moveTo(40, 110);
+  ctx.lineTo(width - 40, 110);
   ctx.stroke();
-  ctx.restore();
-
-  // -------------------------------------------------------------
-  // LEFT PANEL: Pass vs. Fail 3D Donut
-  // -------------------------------------------------------------
-  ctx.save();
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 24px Century Gothic';
-  ctx.textAlign = 'center';
-  ctx.fillText('Pass vs. Fail Composition', canvas.width / 4, 55);
-
-  const passFailData = [
-    {
-      label: 'Passed',
-      value: Math.max(0.001, passedCount),
-      color: '#059669',
-      count: passedCount,
-      percentStr: `${passRate}%`,
-    },
-    {
-      label: 'Failed',
-      value: Math.max(0.001, failedCount),
-      color: '#e11d48',
-      count: failedCount,
-      percentStr: `${failRate}%`,
-    },
-  ];
-
-  draw3DDonutOnCanvas(ctx, canvas.width / 4, 340, 140, 28, 65, passFailData);
-
-  // Bottom Legend for Pass / Fail
-  ctx.font = 'bold 18px Century Gothic';
-  ctx.fillStyle = '#059669';
-  ctx.textAlign = 'center';
-  ctx.fillText(`Passed: ${passedCount} (${passRate}%)`, canvas.width / 4 - 120, 595);
-
-  ctx.fillStyle = '#e11d48';
-  ctx.fillText(`Failed: ${failedCount} (${failRate}%)`, canvas.width / 4 + 120, 595);
-  ctx.restore();
-
-  // -------------------------------------------------------------
-  // RIGHT PANEL: Benchmark & Average Performance 3D Bars
-  // -------------------------------------------------------------
-  ctx.save();
-  ctx.fillStyle = '#0f172a';
-  ctx.font = 'bold 24px Century Gothic';
-  ctx.textAlign = 'center';
-  ctx.fillText('Average Performance & Score Range', (3 * canvas.width) / 4, 55);
-
-  const rStartX = canvas.width / 2 + 70;
-  const rWidth = canvas.width / 2 - 140;
-  const floorY = 530;
-  const maxHeight = 340;
-  const depth = 22;
-  const barW = 110;
-
-  const barItems = [
-    { label: 'Highest', value: highestPct, color: '#059669' },
-    { label: 'Average', value: avgPct, color: '#2563eb' },
-    { label: 'Lowest', value: lowestPct, color: '#f59e0b' },
-  ];
-
-  const barSpacing = (rWidth - barW * barItems.length) / (barItems.length - 1);
-
-  // Grid lines (0%, 25%, 50%, 75%, 100%)
-  ctx.strokeStyle = '#f1f5f9';
-  ctx.lineWidth = 1;
-  for (let g = 0; g <= 4; g++) {
-    const gy = floorY - (g / 4) * maxHeight;
-    ctx.beginPath();
-    ctx.moveTo(rStartX - 20, gy);
-    ctx.lineTo(rStartX + rWidth + 20, gy);
-    ctx.stroke();
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '15px Century Gothic';
-    ctx.textAlign = 'right';
-    ctx.fillText(`${g * 25}%`, rStartX - 25, gy + 5);
-  }
-
-  // Floor
-  ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(rStartX - 30, floorY);
-  ctx.lineTo(rStartX + rWidth + 30, floorY);
-  ctx.stroke();
-
-  barItems.forEach((b, i) => {
-    const barH = Math.max(10, (b.value / 100) * maxHeight);
-    const bx = rStartX + i * (barW + barSpacing);
-    const by = floorY - barH;
-
-    draw3DBarOnCanvas(ctx, bx, by, barW, barH, depth, b.color);
-
-    // Value above bar
-    ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 22px Century Gothic';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${b.value}%`, bx + barW / 2 + depth / 2, by - depth - 10);
-
-    // Label below floor
-    ctx.fillStyle = '#1e293b';
-    ctx.font = 'bold 18px Century Gothic';
-    ctx.fillText(b.label, bx + barW / 2, floorY + 32);
-  });
-  ctx.restore();
-
-  return canvas.toDataURL('image/png');
 }
 
 /**
- * Chart: ATOM 7-bracket Histogram Chart (0-40%, 41-50%, 51-60%, 61-70%, 71-80%, 81-90%, 91-100%)
+ * Chart 1: 3D Score Distribution Chart
  */
-function createAtomScoreHistogramChart(
+function createScoreDistributionChart(
   attemptedPercentages: number[],
   totalAttempts: number
 ): string {
   const canvas = document.createElement('canvas');
   canvas.width = 1400;
-  canvas.height = 700;
+  canvas.height = 760;
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  generateChartHeader(
+    ctx,
+    canvas.width,
+    '3D Score Distribution Analysis',
+    'Candidate performance grouped by score percentage brackets'
+  );
+
   const brackets = [
-    { label: '0–40%', min: 0, max: 40, color: '#3b82f6' },
-    { label: '41–50%', min: 41, max: 50, color: '#3b82f6' },
-    { label: '51–60%', min: 51, max: 60, color: '#3b82f6' },
-    { label: '61–70%', min: 61, max: 70, color: '#3b82f6' },
-    { label: '71–80%', min: 71, max: 80, color: '#3b82f6' },
-    { label: '81–90%', min: 81, max: 90, color: '#3b82f6' },
-    { label: '91–100%', min: 91, max: 100, color: '#3b82f6' },
+    { label: '0-20%', min: 0, max: 20, color: '#e11d48' },
+    { label: '21-40%', min: 21, max: 40, color: '#f97316' },
+    { label: '41-60%', min: 41, max: 60, color: '#eab308' },
+    { label: '61-80%', min: 61, max: 80, color: '#3b82f6' },
+    { label: '81-100%', min: 81, max: 100, color: '#059669' },
   ];
 
   const counts = brackets.map(
@@ -404,66 +274,53 @@ function createAtomScoreHistogramChart(
   );
   const maxCount = Math.max(1, ...counts);
 
-  const floorY = 580;
-  const chartStartX = 100;
-  const chartWidth = canvas.width - 200;
-  const barWidth = 110;
-  const depth = 22;
+  const floorY = 620;
+  const chartStartX = 140;
+  const chartWidth = canvas.width - 280;
+  const barWidth = 130;
+  const depth = 28;
   const maxHeight = 380;
   const spacing = (chartWidth - barWidth * brackets.length) / (brackets.length - 1);
 
-  // Background Grid Lines
   ctx.save();
-  ctx.strokeStyle = '#f1f5f9';
-  ctx.lineWidth = 1;
-  for (let g = 0; g <= 4; g++) {
-    const gy = floorY - (g / 4) * maxHeight;
-    ctx.beginPath();
-    ctx.moveTo(chartStartX - 20, gy);
-    ctx.lineTo(chartStartX + chartWidth + 20, gy);
-    ctx.stroke();
-
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = '16px Century Gothic';
-    ctx.textAlign = 'right';
-    ctx.fillText(`${Math.round((g / 4) * maxCount)}`, chartStartX - 30, gy + 5);
-  }
-  ctx.restore();
-
-  // Floor
-  ctx.save();
+  const floorGrad = ctx.createLinearGradient(0, floorY - depth, 0, floorY);
+  floorGrad.addColorStop(0, '#f1f5f9');
+  floorGrad.addColorStop(1, '#e2e8f0');
+  ctx.fillStyle = floorGrad;
+  ctx.beginPath();
+  ctx.moveTo(chartStartX - 40, floorY);
+  ctx.lineTo(chartStartX - 40 + depth, floorY - depth);
+  ctx.lineTo(chartStartX + chartWidth + 40 + depth, floorY - depth);
+  ctx.lineTo(chartStartX + chartWidth + 40, floorY);
+  ctx.closePath();
+  ctx.fill();
   ctx.strokeStyle = '#cbd5e1';
   ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(chartStartX - 30, floorY);
-  ctx.lineTo(chartStartX + chartWidth + 30, floorY);
   ctx.stroke();
   ctx.restore();
 
   brackets.forEach((b, i) => {
     const count = counts[i];
     const pctShare = totalAttempts > 0 ? ((count / totalAttempts) * 100).toFixed(1) : '0';
-    const barHeight = count > 0 ? Math.max(14, (count / maxCount) * maxHeight) : 0;
+    const barHeight = Math.max(12, (count / maxCount) * maxHeight);
     const bx = chartStartX + i * (barWidth + spacing);
     const by = floorY - barHeight;
 
-    if (barHeight > 0) {
-      draw3DBarOnCanvas(ctx, bx, by, barWidth, barHeight, depth, '#3b82f6');
-    }
+    draw3DBarOnCanvas(ctx, bx, by, barWidth, barHeight, depth, b.color);
 
     ctx.save();
     ctx.fillStyle = '#0f172a';
     ctx.font = 'bold 24px Century Gothic';
     ctx.textAlign = 'center';
-    ctx.fillText(`${count}`, bx + barWidth / 2 + depth / 2, (barHeight > 0 ? by - depth : floorY) - 14);
+    ctx.fillText(`${count}`, bx + barWidth / 2 + depth / 2, by - depth - 16);
 
     ctx.fillStyle = '#64748b';
-    ctx.font = '16px Century Gothic';
-    ctx.fillText(`(${pctShare}%)`, bx + barWidth / 2 + depth / 2, (barHeight > 0 ? by - depth : floorY) + 8);
+    ctx.font = 'bold 16px Century Gothic';
+    ctx.fillText(`(${pctShare}%)`, bx + barWidth / 2 + depth / 2, by - depth + 6);
 
     ctx.fillStyle = '#1e293b';
     ctx.font = 'bold 20px Century Gothic';
-    ctx.fillText(b.label, bx + barWidth / 2, floorY + 36);
+    ctx.fillText(b.label, bx + barWidth / 2, floorY + 40);
     ctx.restore();
   });
 
@@ -471,63 +328,210 @@ function createAtomScoreHistogramChart(
 }
 
 /**
- * Chart: ATOM 4-Tier Performance Composition Donut Chart
+ * Chart 2: 3D Pass vs Fail Donut Chart
  */
-function createAtomTiersDonutChart(percentages: number[]): string {
+function createPassFailDonutChart(
+  passCount: number,
+  failCount: number,
+  absentCount: number,
+  totalCandidates: number
+): string {
   const canvas = document.createElement('canvas');
-  canvas.width = 1200;
-  canvas.height = 650;
+  canvas.width = 1400;
+  canvas.height = 760;
   const ctx = canvas.getContext('2d');
   if (!ctx) return '';
 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const total = percentages.length;
-  const excellentCount = percentages.filter((p) => p >= 90).length;
-  const goodCount = percentages.filter((p) => p >= 60 && p < 90).length;
-  const avgCount = percentages.filter((p) => p >= 40 && p < 60).length;
-  const improvementCount = percentages.filter((p) => p < 40).length;
+  generateChartHeader(
+    ctx,
+    canvas.width,
+    '3D Pass vs. Fail Qualification Breakdown',
+    'Candidate qualification distribution and turnout assessment'
+  );
 
   const data = [
-    {
-      label: 'Excellent (90-100%)',
-      value: excellentCount,
-      color: '#059669',
-      count: excellentCount,
-      percentStr: `${total > 0 ? ((excellentCount / total) * 100).toFixed(1) : 0}%`,
-    },
-    {
-      label: 'Good (60-89%)',
-      value: goodCount,
-      color: '#2563eb',
-      count: goodCount,
-      percentStr: `${total > 0 ? ((goodCount / total) * 100).toFixed(1) : 0}%`,
-    },
-    {
-      label: 'Average (40-59%)',
-      value: avgCount,
-      color: '#f59e0b',
-      count: avgCount,
-      percentStr: `${total > 0 ? ((avgCount / total) * 100).toFixed(1) : 0}%`,
-    },
-    {
-      label: 'Needs Improvement (<40%)',
-      value: improvementCount,
-      color: '#e11d48',
-      count: improvementCount,
-      percentStr: `${total > 0 ? ((improvementCount / total) * 100).toFixed(1) : 0}%`,
-    },
+    { label: 'Passed (≥50%)', value: passCount, color: '#008037', count: passCount, percentStr: `${totalCandidates > 0 ? ((passCount / totalCandidates) * 100).toFixed(1) : 0}%` },
+    { label: 'Failed (<50%)', value: failCount, color: '#e11d48', count: failCount, percentStr: `${totalCandidates > 0 ? ((failCount / totalCandidates) * 100).toFixed(1) : 0}%` },
+    { label: 'Unattempted', value: absentCount, color: '#94a3b8', count: absentCount, percentStr: `${totalCandidates > 0 ? ((absentCount / totalCandidates) * 100).toFixed(1) : 0}%` },
   ];
 
-  draw3DDonutOnCanvas(ctx, 600, 340, 220, 42, 100, data);
+  draw3DDonutOnCanvas(ctx, 700, 420, 260, 48, 120, data);
+
+  ctx.save();
+  ctx.fillStyle = '#0f172a';
+  ctx.font = 'bold 36px Century Gothic';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const passRate = (passCount + failCount) > 0 ? Math.round((passCount / (passCount + failCount)) * 100) : 0;
+  ctx.fillText(`${passRate}%`, 700, 410);
+
+  ctx.fillStyle = '#059669';
+  ctx.font = 'bold 18px Century Gothic';
+  ctx.fillText('PASS RATE', 700, 445);
+  ctx.restore();
 
   return canvas.toDataURL('image/png');
 }
 
 /**
- * Chart: 3D Side-by-Side Comparative Bar Chart for 2 Exams
+ * Chart 3: 3D Section-wise Accuracy Chart
  */
+function createSectionAccuracyChart(
+  sectionData: { name: string; accuracy: number; questionsCount: number; maxMarks: number }[]
+): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1400;
+  canvas.height = 760;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  generateChartHeader(
+    ctx,
+    canvas.width,
+    '3D Section-Wise Accuracy Performance',
+    'Average accuracy comparison across all examination sections'
+  );
+
+  const colors = ['#008037', '#0284c7', '#8b5cf6', '#d97706', '#e11d48', '#0d9488'];
+  const floorY = 620;
+  const chartStartX = 140;
+  const chartWidth = canvas.width - 280;
+  const count = Math.max(1, sectionData.length);
+  const barWidth = Math.min(180, Math.max(80, (chartWidth - 60 * (count - 1)) / count));
+  const depth = 26;
+  const maxHeight = 380;
+  const spacing = count > 1 ? (chartWidth - barWidth * count) / (count - 1) : 0;
+
+  ctx.save();
+  const floorGrad = ctx.createLinearGradient(0, floorY - depth, 0, floorY);
+  floorGrad.addColorStop(0, '#f1f5f9');
+  floorGrad.addColorStop(1, '#e2e8f0');
+  ctx.fillStyle = floorGrad;
+  ctx.beginPath();
+  ctx.moveTo(chartStartX - 30, floorY);
+  ctx.lineTo(chartStartX - 30 + depth, floorY - depth);
+  ctx.lineTo(chartStartX + chartWidth + 30 + depth, floorY - depth);
+  ctx.lineTo(chartStartX + chartWidth + 30, floorY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+
+  sectionData.forEach((sec, i) => {
+    const color = colors[i % colors.length];
+    const barHeight = Math.max(12, (sec.accuracy / 100) * maxHeight);
+    const bx = chartStartX + i * (barWidth + spacing);
+    const by = floorY - barHeight;
+
+    draw3DBarOnCanvas(ctx, bx, by, barWidth, barHeight, depth, color);
+
+    ctx.save();
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 24px Century Gothic';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${sec.accuracy}%`, bx + barWidth / 2 + depth / 2, by - depth - 16);
+
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 18px Century Gothic';
+    const label = sec.name.length > 18 ? sec.name.substring(0, 16) + '...' : sec.name;
+    ctx.fillText(label, bx + barWidth / 2, floorY + 40);
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '14px Century Gothic';
+    ctx.fillText(`${sec.questionsCount} Qs (${sec.maxMarks}M)`, bx + barWidth / 2, floorY + 65);
+    ctx.restore();
+  });
+
+  return canvas.toDataURL('image/png');
+}
+
+
+
+/**
+ * Chart 4: 3D Department-wise Performance Chart
+ */
+function createDepartmentPerformanceChart(
+  deptData: { department: string; avgScore: number; count: number }[]
+): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1400;
+  canvas.height = 760;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  generateChartHeader(
+    ctx,
+    canvas.width,
+    '3D Department-Wise Performance Comparison',
+    'Average candidate percentage score by academic/functional department'
+  );
+
+  const colors = ['#059669', '#2563eb', '#7c3aed', '#ea580c', '#db2777', '#0891b2'];
+  const floorY = 620;
+  const chartStartX = 140;
+  const chartWidth = canvas.width - 280;
+  const count = Math.max(1, deptData.length);
+  const barWidth = Math.min(180, Math.max(80, (chartWidth - 60 * (count - 1)) / count));
+  const depth = 26;
+  const maxHeight = 380;
+  const spacing = count > 1 ? (chartWidth - barWidth * count) / (count - 1) : 0;
+
+  ctx.save();
+  const floorGrad = ctx.createLinearGradient(0, floorY - depth, 0, floorY);
+  floorGrad.addColorStop(0, '#f1f5f9');
+  floorGrad.addColorStop(1, '#e2e8f0');
+  ctx.fillStyle = floorGrad;
+  ctx.beginPath();
+  ctx.moveTo(chartStartX - 30, floorY);
+  ctx.lineTo(chartStartX - 30 + depth, floorY - depth);
+  ctx.lineTo(chartStartX + chartWidth + 30 + depth, floorY - depth);
+  ctx.lineTo(chartStartX + chartWidth + 30, floorY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.restore();
+
+  deptData.forEach((d, i) => {
+    const color = colors[i % colors.length];
+    const barHeight = Math.max(12, (d.avgScore / 100) * maxHeight);
+    const bx = chartStartX + i * (barWidth + spacing);
+    const by = floorY - barHeight;
+
+    draw3DBarOnCanvas(ctx, bx, by, barWidth, barHeight, depth, color);
+
+    ctx.save();
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 24px Century Gothic';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${d.avgScore}%`, bx + barWidth / 2 + depth / 2, by - depth - 16);
+
+    ctx.fillStyle = '#1e293b';
+    ctx.font = 'bold 18px Century Gothic';
+    const label = d.department.length > 18 ? d.department.substring(0, 16) + '...' : d.department;
+    ctx.fillText(label, bx + barWidth / 2, floorY + 40);
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '14px Century Gothic';
+    ctx.fillText(`${d.count} Candidate${d.count !== 1 ? 's' : ''}`, bx + barWidth / 2, floorY + 65);
+    ctx.restore();
+  });
+
+  return canvas.toDataURL('image/png');
+}
+
 function createAtomComparativeChart(
   exam1Label: string,
   exam2Label: string,
@@ -632,6 +636,7 @@ function createAtomComparativeChart(
   return canvas.toDataURL('image/png');
 }
 
+
 export interface ComparisonExamData {
   exam: Exam;
   candidates: Candidate[];
@@ -642,13 +647,11 @@ export interface ComparisonExamData {
 export interface PdfExportOptions {
   filteredCandidates?: Candidate[];
   isFiltered?: boolean;
-  includeResults?: boolean; // true = With Complete Result, false = Without Result (Summary & Analytics only)
-  comparisonExamData?: ComparisonExamData; // Optional comparison with another exam
+  includeResults?: boolean;
+  comparisonExamData?: ComparisonExamData;
 }
 
-/**
- * Generate and download a Complete Comprehensive PDF Report matching the exact ATOM Specification Template
- */
+
 export async function exportExamDetailedPdfReport(
   exam: Exam,
   candidates: Candidate[],
@@ -657,7 +660,7 @@ export async function exportExamDetailedPdfReport(
   options?: PdfExportOptions
 ) {
   const isFiltered = options?.isFiltered ?? false;
-  const includeResults = options?.includeResults !== false; // default to true
+  const includeResults = options?.includeResults !== false;
   const targetCandidates = options?.filteredCandidates ?? candidates;
   const totalQuestions = exam.questions.length;
   const examTotalMarks = exam.questions.reduce((sum, q) => sum + (safeNum(q.marks) || 1), 0);
@@ -674,24 +677,6 @@ export async function exportExamDetailedPdfReport(
     let obtainedMarks = safeNum(result?.obtainedMarks, 0);
     let percentage = safeNum(result?.percentage, 0);
     let tabSwitches = safeNum(attempt?.tabSwitches, 0);
-
-    // Calculate time taken in minutes
-    let timeTakenMinutes = 0;
-    if (attempt?.startedAt && attempt?.submittedAt) {
-      const s = new Date(attempt.startedAt).getTime();
-      const e = new Date(attempt.submittedAt).getTime();
-      if (e > s) {
-        timeTakenMinutes = Math.max(1, Math.round((e - s) / 60000));
-      }
-    } else if (attempt?.answers && attempt.answers.length > 0) {
-      const totalSec = attempt.answers.reduce((acc, a) => acc + (safeNum(a.timeSpentSeconds) || 0), 0);
-      if (totalSec > 0) {
-        timeTakenMinutes = Math.max(1, Math.round(totalSec / 60));
-      }
-    }
-    if (timeTakenMinutes === 0 && isAttempted) {
-      timeTakenMinutes = Math.min(exam.settings?.duration || 30, 25);
-    }
 
     // Recalculate if result object missing but attempt exists
     if (!result && attempt && isAttempted) {
@@ -718,7 +703,6 @@ export async function exportExamDetailedPdfReport(
 
     const skipped = totalQuestions - (correct + wrong);
     const isPass = percentage >= 50;
-    const accuracy = (correct + wrong) > 0 ? Math.round((correct / (correct + wrong)) * 100) : percentage;
     const submissionStatus = !isAttempted
       ? 'Not Attempted'
       : (exam.settings.maxTabSwitches ?? 0) > 0 && tabSwitches >= exam.settings.maxTabSwitches
@@ -736,8 +720,6 @@ export async function exportExamDetailedPdfReport(
       obtainedMarks,
       totalMarks: examTotalMarks,
       percentage,
-      accuracy,
-      timeTakenMinutes,
       isPass,
       tabSwitches,
       submissionStatus,
@@ -754,35 +736,26 @@ export async function exportExamDetailedPdfReport(
   const totalTargetCandidates = targetCandidates.length;
   const attemptedCandidates = candidateResults.filter((cr) => cr.isAttempted);
   const attemptedCount = attemptedCandidates.length;
-  const completionRate = totalTargetCandidates > 0 ? ((attemptedCount / totalTargetCandidates) * 100).toFixed(1) : '0';
+  const notAttemptedCount = totalTargetCandidates - attemptedCount;
   const passCount = attemptedCandidates.filter((cr) => cr.isPass).length;
-  const passRate = attemptedCount > 0 ? ((passCount / attemptedCount) * 100).toFixed(0) : '0';
+  const failCount = attemptedCount - passCount;
+  const passRate = attemptedCount > 0 ? ((passCount / attemptedCount) * 100).toFixed(1) : '0';
+  const failRate = attemptedCount > 0 ? ((failCount / attemptedCount) * 100).toFixed(1) : '0';
 
-  const totalScoreSum = attemptedCandidates.reduce((sum, cr) => sum + safeNum(cr.percentage), 0);
-  const avgPercentage = attemptedCount > 0 ? (totalScoreSum / attemptedCount).toFixed(1) : '0';
-
-  const highestPercentage = attemptedCount > 0
-    ? Math.max(...attemptedCandidates.map((cr) => safeNum(cr.percentage))).toFixed(0)
-    : '0';
-  const lowestPercentage = attemptedCount > 0
-    ? Math.min(...attemptedCandidates.map((cr) => safeNum(cr.percentage))).toFixed(0)
+  const totalScoreSum = attemptedCandidates.reduce((sum, cr) => sum + safeNum(cr.obtainedMarks), 0);
+  const avgScore = attemptedCount > 0 ? (totalScoreSum / attemptedCount).toFixed(2) : '0.00';
+  const avgPercentage = attemptedCount > 0
+    ? (attemptedCandidates.reduce((sum, cr) => sum + safeNum(cr.percentage), 0) / attemptedCount).toFixed(1)
     : '0';
 
-  const avgTimeTakenMin = attemptedCount > 0
-    ? Math.round(attemptedCandidates.reduce((sum, cr) => sum + cr.timeTakenMinutes, 0) / attemptedCount)
+  const highestScore = attemptedCount > 0
+    ? Math.max(...attemptedCandidates.map((cr) => safeNum(cr.obtainedMarks)))
+    : 0;
+  const lowestScore = attemptedCount > 0
+    ? Math.min(...attemptedCandidates.map((cr) => safeNum(cr.obtainedMarks)))
     : 0;
 
-  const fastestAttemptMin = attemptedCount > 0
-    ? Math.min(...attemptedCandidates.map((cr) => cr.timeTakenMinutes))
-    : 0;
-
-  const longestAttemptMin = attemptedCount > 0
-    ? Math.max(...attemptedCandidates.map((cr) => cr.timeTakenMinutes))
-    : 0;
-
-  const avgTimePerQuestionSec = (attemptedCount > 0 && totalQuestions > 0)
-    ? Math.round((avgTimeTakenMin * 60) / totalQuestions)
-    : 0;
+  const flaggedCount = candidateResults.filter((cr) => cr.submissionStatus === 'Limit Exceeded').length;
 
   // Initialize jsPDF Document (Portrait, A4)
   const doc = new jsPDF({
@@ -793,193 +766,185 @@ export async function exportExamDetailedPdfReport(
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const templateBgDataUrl = await getTemplateBgDataUrl();
+  const darkTextColor = [30, 41, 59]; // slate-800
+
   const logoDataUrl = await getLogoDataUrl();
 
-  // Helper: Fallback vector decorations if template image fails to load
-  const renderFallbackDecoration = () => {
-    // Top right orange/brown corner triangle accent
-    doc.setFillColor(245, 158, 11);
-    doc.triangle(pageWidth, 0, pageWidth - 32, 0, pageWidth, 24, 'F');
-    doc.setFillColor(217, 119, 6);
-    doc.triangle(pageWidth, 0, pageWidth - 14, 0, pageWidth, 12, 'F');
+  // Helper for Header Banner on Cover Page
+  const drawCoverHeader = () => {
+    doc.setFillColor(0, 128, 55);
+    doc.rect(0, 0, pageWidth, 26, 'F');
 
-    // ATOM Logo / Brand Header on left
+    doc.setFillColor(16, 185, 129);
+    doc.rect(0, 26, pageWidth, 1.5, 'F');
+
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, 'PNG', 14, 8, 38, 14);
+        doc.addImage(logoDataUrl, 'PNG', 14, 4, 38, 18);
       } catch (e) {
+        doc.setTextColor(255, 255, 255);
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(16);
-        doc.setTextColor(0, 128, 55);
-        doc.text('ATOM', 14, 18);
+        doc.setFontSize(18);
+        doc.text('ATOM', 14, 16);
       }
     } else {
+      doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(16);
-      doc.setTextColor(0, 128, 55);
-      doc.text('ATOM', 14, 18);
+      doc.setFontSize(18);
+      doc.text('ATOM', 14, 16);
     }
 
-    // Subtle center watermark
-    try {
-      doc.saveGraphicsState();
-      const gState = new (doc as any).GState({ opacity: 0.05 });
-      doc.setGState(gState);
-      doc.setFillColor(0, 128, 55);
-      doc.setDrawColor(0, 128, 55);
-      const cx = pageWidth / 2;
-      const cy = pageHeight / 2 - 10;
-      doc.roundedRect(cx - 38, cy - 38, 76, 76, 12, 12, 'F');
-      doc.restoreGraphicsState();
-    } catch (e) {
-      // ignore
-    }
-
-    // Standard Footer
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('EXAMINATION INTELLIGENCE REPORT', pageWidth - 14, 12, { align: 'right' });
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(71, 85, 105);
-    const footerDisclaimer = 'Any form of reproduction, dissemination, copying, disclosure, modification, distribution and or publication of this material is strictly prohibited.';
-    doc.text(footerDisclaimer, pageWidth / 2, pageHeight - 12, { align: 'center' });
-
-    doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
-    doc.setTextColor(0, 128, 55);
-    doc.text('| www.atomm.in |', pageWidth / 2, pageHeight - 7, { align: 'center' });
+    doc.setTextColor(220, 252, 231);
+    doc.text(`Generated: ${formatDateTime(new Date().toISOString())}`, pageWidth - 14, 18, { align: 'right' });
   };
 
-  // Helper: Draw Header & Background Watermark from official template.pdf on ATOM page
-  const renderAtomPageDecoration = (pageNumberText: string) => {
-    if (templateBgDataUrl) {
-      try {
-        doc.addImage(templateBgDataUrl, 'PNG', 0, 0, pageWidth, pageHeight, undefined, 'FAST');
-      } catch (e) {
-        console.warn('Failed to add template bg image, using fallback vector decoration', e);
-        renderFallbackDecoration();
-      }
-    } else {
-      renderFallbackDecoration();
-    }
+  drawCoverHeader();
 
-    // Dynamic Page Number in top-right peach triangle
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.setTextColor(30, 41, 59);
-    doc.text(pageNumberText, pageWidth - 14, 11.5, { align: 'center' });
-  };
+  let currentY = 34;
 
-  // =========================================================================
-  // PAGE 1: EXECUTIVE SUMMARY & HIGH-LEVEL GRAPHS
-  // =========================================================================
-  renderAtomPageDecoration('1');
-
-  let currentY = 32;
-
+  // Title Block
+  doc.setTextColor(darkTextColor[0], darkTextColor[1], darkTextColor[2]);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(15, 23, 42);
-  doc.text('1. Executive Summary', 14, currentY);
-  currentY += 6;
+  doc.setFontSize(16);
+  doc.text(exam.name, 14, currentY);
+  currentY += 5.5;
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(71, 85, 105);
-  doc.text('A dashboard-style page showing the most important numbers:', 14, currentY);
-  currentY += 6;
+  doc.setFontSize(9.5);
+  doc.setTextColor(100, 116, 139);
+  const examCodeText = `Exam Code: ${exam.code}  |  Duration: ${exam.settings.duration} Mins  |  Total Marks: ${examTotalMarks}  |  Questions: ${totalQuestions}`;
+  doc.text(examCodeText, 14, currentY);
+  currentY += 8;
 
-  // KPI Table
+  // =========================================================================
+  // SECTION 1: EXAMINATION SPECIFICATIONS & POLICY
+  // =========================================================================
   autoTable(doc, {
     startY: currentY,
-    head: [['KPI', 'Result']],
+    head: [['EXAMINATION SPECIFICATIONS & CONFIGURATION', 'VALUE / POLICY']],
     body: [
-      ['Students Registered', `${totalTargetCandidates}`],
-      ['Students Attempted', `${attemptedCount}`],
-      ['Completion Rate', `${completionRate}%`],
-      ['Average Score', `${avgPercentage}%`],
-      ['Highest Score', `${highestPercentage}%`],
-      ['Lowest Score', `${lowestPercentage}%`],
-      ['Pass Rate', `${passRate}%`],
-      ['Average Time Taken', `${avgTimeTakenMin} min`],
+      ['Examination Name', exam.name],
+      ['Access Code', exam.code],
+      ['Scheduled Window', `${formatDateTime(exam.startDateTime)}  to  ${formatDateTime(exam.endDateTime)}`],
+      ['Total Assessment Duration', `${exam.settings.duration} Minutes`],
+      ['Total Questions & Max Marks', `${totalQuestions} Questions  |  ${examTotalMarks} Max Marks`],
+      ['Standard Passing Threshold', `50% Score (${(examTotalMarks * 0.5).toFixed(1)} Marks required to Pass)`],
+      ['Negative Marking Policy', examNegativeMarks > 0 ? `-${examNegativeMarks} marks per incorrect question` : 'Disabled (0 negative marks)'],
+      ['Integrity & Security Policy', exam.settings.tabSwitchDetection ? `Tab Switch Limit: Max ${exam.settings.maxTabSwitches || 3} allowed` : 'Tab Switch Detection Disabled'],
     ],
-    theme: 'plain',
+    theme: 'grid',
     headStyles: {
-      fillColor: [248, 250, 252],
-      textColor: [15, 23, 42],
+      fillColor: [0, 128, 55],
+      textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 10,
+      fontSize: 8.5,
     },
     columnStyles: {
-      0: { cellWidth: 80, fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 9.5 },
-      1: { cellWidth: 50, fontStyle: 'bold', textColor: [0, 128, 55], fontSize: 9.5 },
+      0: { cellWidth: 70, fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 8 },
+      1: { cellWidth: 'auto', textColor: [51, 65, 85], fontSize: 8 },
     },
     margin: { left: 14, right: 14 },
     styles: { cellPadding: 2.2, font: 'helvetica' },
   });
 
-  currentY = (doc as any).lastAutoTable.finalY + 8;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(15, 23, 42);
-  doc.text('2. Graphs: Overall Performance & Pass/Fail', 14, currentY);
-  currentY += 5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text('Visual analytics for pass vs. fail distribution and score benchmarks:', 14, currentY);
-  currentY += 5;
-
-  const passedCandidatesCount = passCount;
-  const failedCandidatesCount = Math.max(0, attemptedCount - passCount);
-
-  const execGraphsImg = createAtomExecutiveOverviewCharts(
-    passedCandidatesCount,
-    failedCandidatesCount,
-    safeNum(passRate),
-    safeNum(highestPercentage),
-    safeNum(avgPercentage),
-    safeNum(lowestPercentage)
-  );
-
-  if (execGraphsImg) {
-    const graphHeight = 85;
-    doc.addImage(execGraphsImg, 'PNG', 14, currentY, pageWidth - 28, graphHeight);
-    currentY += graphHeight + 6;
-  }
+  currentY = (doc as any).lastAutoTable.finalY + 6;
 
   // =========================================================================
-  // PAGE 2: STUDENT PERFORMANCE DISTRIBUTION & SECTION-WISE PERFORMANCE
+  // SECTION 2: EXECUTIVE COHORT PERFORMANCE & METRICS
   // =========================================================================
-  doc.addPage();
-  renderAtomPageDecoration('2');
-  currentY = 32;
-
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(15, 23, 42);
-  doc.text('3. Student Performance Distribution', 14, currentY);
-  currentY += 5;
+  doc.setFontSize(10.5);
+  doc.setTextColor(0, 128, 55);
+  doc.text('COHORT PERFORMANCE & EXECUTIVE METRICS', 14, currentY);
+  currentY += 3;
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text('Score distribution across 7 standardized performance brackets.', 14, currentY);
-  currentY += 5;
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Metric Description', 'Count / Value', 'Cohort Share / Benchmark']],
+    body: [
+      ['Total Registered Candidates', `${totalTargetCandidates} Candidates`, '100% Target Population'],
+      ['Exam Submissions / Attempted', `${attemptedCount} Candidates`, `${totalTargetCandidates > 0 ? ((attemptedCount / totalTargetCandidates) * 100).toFixed(1) : 0}% Turnout Rate`],
+      ['Unattempted / Absent', `${notAttemptedCount} Candidates`, `${totalTargetCandidates > 0 ? ((notAttemptedCount / totalTargetCandidates) * 100).toFixed(1) : 0}% Absentee Rate`],
+      ['Qualified / Passed (>= 50%)', `${passCount} Candidates`, `${passRate}% of Attempted`],
+      ['Did Not Qualify / Failed (< 50%)', `${failCount} Candidates`, `${failRate}% of Attempted`],
+      ['Class Average Score', `${avgScore} / ${examTotalMarks} Marks`, `${avgPercentage}% Average Accuracy`],
+      ['Highest Score Achieved', `${formatMarks(highestScore)} / ${examTotalMarks} Marks`, `${examTotalMarks > 0 ? formatPct((highestScore / examTotalMarks) * 100) : '0%'} Score`],
+      ['Lowest Score Achieved', `${formatMarks(lowestScore)} / ${examTotalMarks} Marks`, `${examTotalMarks > 0 ? formatPct((lowestScore / examTotalMarks) * 100) : '0%'} Score`],
+      ['Integrity Flagged (Limit Exceeded)', `${flaggedCount} Candidates`, flaggedCount > 0 ? 'Review flagged attempts' : 'Zero severe violations'],
+    ],
+    theme: 'striped',
+    headStyles: {
+      fillColor: [5, 150, 105],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8,
+    },
+    columnStyles: {
+      0: { cellWidth: 70, fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 8 },
+      1: { cellWidth: 50, fontStyle: 'bold', textColor: [0, 128, 55], fontSize: 8 },
+      2: { cellWidth: 'auto', textColor: [71, 85, 105], fontSize: 8 },
+    },
+    margin: { left: 14, right: 14 },
+    styles: { cellPadding: 2, font: 'helvetica' },
+  });
 
-  // Generate and insert Histogram Chart
-  const scoreHistImg = createAtomScoreHistogramChart(
-    attemptedCandidates.map((c) => safeNum(c.percentage)),
-    attemptedCount
-  );
-  if (scoreHistImg) {
-    const chartHeight = 68;
-    doc.addImage(scoreHistImg, 'PNG', 14, currentY, pageWidth - 28, chartHeight);
-    currentY += chartHeight + 8;
-  }
+  currentY = (doc as any).lastAutoTable.finalY + 6;
 
-  // Extract sections
+  // =========================================================================
+  // SECTION 3: SCORE BRACKET & GRADE DISTRIBUTION TABLE
+  // =========================================================================
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(0, 128, 55);
+  doc.text('SCORE & PERFORMANCE BRACKET DISTRIBUTION', 14, currentY);
+  currentY += 3;
+
+  const brackets = [
+    { label: '81% - 100%', tier: 'Outstanding (Grade A+)', min: 81, max: 100 },
+    { label: '61% - 80%', tier: 'Good / Competent (Grade A)', min: 61, max: 80 },
+    { label: '41% - 60%', tier: 'Average (Grade B)', min: 41, max: 60 },
+    { label: '21% - 40%', tier: 'Below Average (Grade C)', min: 21, max: 40 },
+    { label: '0% - 20%', tier: 'Needs Improvement (Grade D)', min: 0, max: 20 },
+  ];
+
+  const bracketRows = brackets.map((b) => {
+    const count = attemptedCandidates.filter((c) => safeNum(c.percentage) >= b.min && safeNum(c.percentage) <= b.max).length;
+    const share = attemptedCount > 0 ? ((count / attemptedCount) * 100).toFixed(1) : '0.0';
+    return [b.label, b.tier, `${count} Candidates`, `${share}%`];
+  });
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Percentage Bracket', 'Performance Tier', 'Candidate Count', 'Percentage Share']],
+    body: bracketRows,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [15, 118, 110],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8,
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 8 },
+      1: { textColor: [51, 65, 85], fontSize: 8 },
+      2: { fontStyle: 'bold', textColor: [0, 128, 55], fontSize: 8, halign: 'center' },
+      3: { textColor: [71, 85, 105], fontSize: 8, halign: 'center' },
+    },
+    margin: { left: 14, right: 14 },
+    styles: { cellPadding: 2, font: 'helvetica' },
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 6;
+
+  // =========================================================================
+  // SECTION 4: SECTION-WISE PERFORMANCE BREAKDOWN TABLE
+  // =========================================================================
   const sectionMap = new Map<string, typeof exam.questions>();
   exam.questions.forEach((q) => {
     const sec = q.section || 'General';
@@ -987,20 +952,9 @@ export async function exportExamDetailedPdfReport(
     sectionMap.get(sec)!.push(q);
   });
 
-  // Section 4: Section-Wise Performance Table (rendered on Page 2)
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(15, 23, 42);
-  doc.text('4. Section-Wise Performance', 14, currentY);
-  currentY += 5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text('Performance and accuracy metrics grouped by exam section / subject area:', 14, currentY);
-  currentY += 5;
-
+  const sectionStats: { name: string; accuracy: number; questionsCount: number; maxMarks: number }[] = [];
   const sectionTableRows: any[] = [];
+
   sectionMap.forEach((questions, sectionName) => {
     const secMarks = questions.reduce((sum, q) => sum + (safeNum(q.marks, 1)), 0);
     let secObtainedSum = 0;
@@ -1021,626 +975,759 @@ export async function exportExamDetailedPdfReport(
     const accuracy = secMaxPossibleSum > 0
       ? Math.max(0, Math.round((secObtainedSum / secMaxPossibleSum) * 100))
       : 0;
+    const rating = accuracy >= 75 ? 'High (Mastery)' : accuracy >= 50 ? 'Moderate' : 'Challenging';
 
-    const avgScoreSec = attemptedCount > 0 ? (secObtainedSum / attemptedCount).toFixed(1) : '0';
+    sectionStats.push({
+      name: sectionName,
+      accuracy,
+      questionsCount: questions.length,
+      maxMarks: secMarks,
+    });
 
     sectionTableRows.push([
       sectionName,
-      avgScoreSec,
+      `${questions.length} Questions`,
+      `${secMarks} Marks`,
       `${accuracy}%`,
-      `${secMarks}`,
+      rating,
     ]);
   });
 
-  autoTable(doc, {
-    startY: currentY,
-    head: [['Section', 'Avg. Score', 'Accuracy', 'Max Marks']],
-    body: sectionTableRows,
-    theme: 'plain',
-    headStyles: {
-      fillColor: [248, 250, 252],
-      textColor: [15, 23, 42],
-      fontStyle: 'bold',
-      fontSize: 9,
-    },
-    columnStyles: {
-      0: { cellWidth: 70, fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 8.5 },
-      1: { cellWidth: 35, textColor: [51, 65, 85], fontSize: 8.5 },
-      2: { cellWidth: 35, fontStyle: 'bold', textColor: [0, 128, 55], fontSize: 8.5 },
-      3: { cellWidth: 35, textColor: [51, 65, 85], fontSize: 8.5 },
-    },
-    margin: { left: 14, right: 14 },
-    styles: { cellPadding: 2.2, font: 'helvetica' },
-  });
-
-  // =========================================================================
-  // PAGE 3: PERFORMANCE TIERS (DONUT) & TOP 10 LEADERBOARD
-  // =========================================================================
-  doc.addPage();
-  renderAtomPageDecoration('3');
-  currentY = 32;
-
-  // Section 5: Student Performance Distribution
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(15, 23, 42);
-  doc.text('5. Student Performance Distribution (Tiers)', 14, currentY);
-  currentY += 5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text('Overall candidate performance categorized into 4 achievement tiers:', 14, currentY);
-  currentY += 5;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(0, 128, 55);
-  doc.text('Excellent: 90–100%', 16, currentY);
-  currentY += 4.5;
-  doc.setTextColor(37, 99, 235);
-  doc.text('Good: 60–89%', 16, currentY);
-  currentY += 4.5;
-  doc.setTextColor(217, 119, 6);
-  doc.text('Average: 40–59%', 16, currentY);
-  currentY += 4.5;
-  doc.setTextColor(225, 29, 72);
-  doc.text('Needs Improvement: Below 40%', 16, currentY);
-  currentY += 5.5;
-
-  // Tiers Donut Chart
-  const tiersDonutImg = createAtomTiersDonutChart(attemptedCandidates.map((c) => safeNum(c.percentage)));
-  if (tiersDonutImg) {
-    const donutHeight = 52;
-    doc.addImage(tiersDonutImg, 'PNG', (pageWidth - 110) / 2, currentY, 110, donutHeight);
-    currentY += donutHeight + 8;
+  if (currentY + 45 > pageHeight - 18) {
+    doc.addPage();
+    currentY = 20;
   }
 
-  // Section 6: Top Performers (Leaderboard)
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(15, 23, 42);
-  doc.text('6. Top Performers (Leaderboard)', 14, currentY);
-  currentY += 4.5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text(`Top 10 highest scorers across batch of ${attemptedCount} candidate(s):`, 14, currentY);
-  currentY += 5;
-
-  const top10Candidates = attemptedCandidates.slice(0, 10);
-  const top10Rows = top10Candidates.map((cr, idx) => [
-    `${idx + 1}`,
-    cr.candidate.name,
-    cr.candidate.usn || '-',
-    cr.candidate.phone || '-',
-    `${cr.percentage}%`,
-    `${cr.accuracy}%`,
-    `${cr.timeTakenMinutes} min`,
-  ]);
-
-  autoTable(doc, {
-    startY: currentY,
-    head: [['Rank', 'Student', 'USN / ID', 'Contact', 'Score', 'Accuracy', 'Time']],
-    body: top10Rows.length > 0 ? top10Rows : [['-', 'No attempts yet', '-', '-', '-', '-', '-']],
-    theme: 'plain',
-    headStyles: {
-      fillColor: [248, 250, 252],
-      textColor: [15, 23, 42],
-      fontStyle: 'bold',
-      fontSize: 8.5,
-    },
-    columnStyles: {
-      0: { cellWidth: 12, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 8 },
-      1: { cellWidth: 42, fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 8 },
-      2: { cellWidth: 26, textColor: [71, 85, 105], fontSize: 7.5 },
-      3: { cellWidth: 30, textColor: [71, 85, 105], fontStyle: 'bold', fontSize: 7.5 },
-      4: { cellWidth: 22, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 8 },
-      5: { cellWidth: 24, fontStyle: 'bold', textColor: [37, 99, 235], halign: 'center', fontSize: 8 },
-      6: { cellWidth: 24, textColor: [71, 85, 105], halign: 'center', fontSize: 8 },
-    },
-    margin: { left: 14, right: 14 },
-    styles: { cellPadding: 2, font: 'helvetica' },
-  });
-
-  // =========================================================================
-  // PAGE 4: TIME ANALYSIS & QUESTION DIFFICULTY ANALYSIS
-  // =========================================================================
-  doc.addPage();
-  renderAtomPageDecoration('4');
-  currentY = 32;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(15, 23, 42);
-  doc.text('7. Time Analysis', 14, currentY);
-  currentY += 6;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text('Since your LMS records exam activity, include:', 14, currentY);
-  currentY += 5;
-
-  // Time Analysis table
-  autoTable(doc, {
-    startY: currentY,
-    head: [['Time Metric Parameter', 'Value / Recorded Duration']],
-    body: [
-      ['Average time taken', `${avgTimeTakenMin} minutes`],
-      ['Fastest attempt', `${fastestAttemptMin} minutes`],
-      ['Longest attempt', `${longestAttemptMin} minutes`],
-      ['Average time per question', `${avgTimePerQuestionSec} seconds / question`],
-      ['Total Exam Scheduled Duration', `${exam.settings?.duration || 30} minutes`],
-    ],
-    theme: 'plain',
-    headStyles: {
-      fillColor: [248, 250, 252],
-      textColor: [15, 23, 42],
-      fontStyle: 'bold',
-      fontSize: 9,
-    },
-    columnStyles: {
-      0: { cellWidth: 90, fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 8.5 },
-      1: { cellWidth: 80, fontStyle: 'bold', textColor: [0, 128, 55], fontSize: 8.5 },
-    },
-    margin: { left: 14, right: 14 },
-    styles: { cellPadding: 2.2, font: 'helvetica' },
-  });
-
-  currentY = (doc as any).lastAutoTable.finalY + 8;
-
-  // Section 8: Question Difficulty Analysis
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(15, 23, 42);
-  doc.text('8. Question Difficulty Analysis', 14, currentY);
-  currentY += 5.5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(71, 85, 105);
-  doc.text('Your LMS can automatically classify questions based on actual student responses.', 14, currentY);
-  currentY += 4.5;
-  doc.text('For example:', 14, currentY);
-  currentY += 4.5;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
+  doc.setFontSize(10.5);
   doc.setTextColor(0, 128, 55);
-  doc.text('Easy', 16, currentY);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(71, 85, 105);
-  doc.text('•  > 80% students answered correctly', 28, currentY);
-  currentY += 4.5;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(217, 119, 6);
-  doc.text('Moderate', 16, currentY);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(71, 85, 105);
-  doc.text('•  50–80%', 36, currentY);
-  currentY += 4.5;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(225, 29, 72);
-  doc.text('Difficult', 16, currentY);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(71, 85, 105);
-  doc.text('•  < 50%', 33, currentY);
-  currentY += 5.5;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(15, 23, 42);
-  doc.text('Then show:', 14, currentY);
-  currentY += 4.5;
-
-  // Classify questions
-  const easyQuestions: any[] = [];
-  const moderateQuestions: any[] = [];
-  const difficultQuestions: any[] = [];
-
-  exam.questions.forEach((q, idx) => {
-    let correctCount = 0;
-    attemptedCandidates.forEach((cr) => {
-      const ans = cr.attempt?.answers.find((a) => a.questionId === q.id);
-      if (ans && ans.selectedAnswer === q.correctAnswer) {
-        correctCount++;
-      }
-    });
-
-    const accuracy = attemptedCount > 0 ? Math.round((correctCount / attemptedCount) * 100) : 0;
-    const preview = (q.text || '').replace(/\s+/g, ' ').substring(0, 42) + (q.text.length > 42 ? '...' : '');
-
-    const item = {
-      qNum: `Q${idx + 1}`,
-      section: q.section || 'General',
-      preview,
-      accuracy: `${accuracy}%`,
-      correct: `${correctCount}/${attemptedCount}`,
-    };
-
-    if (accuracy >= 80) {
-      easyQuestions.push(item);
-    } else if (accuracy >= 50) {
-      moderateQuestions.push(item);
-    } else {
-      difficultQuestions.push(item);
-    }
-  });
-
-  const questionDiffRows = [
-    ...easyQuestions.map((q) => [q.qNum, q.section, q.preview, 'Easy (>80%)', q.accuracy, q.correct]),
-    ...moderateQuestions.map((q) => [q.qNum, q.section, q.preview, 'Moderate (50-80%)', q.accuracy, q.correct]),
-    ...difficultQuestions.map((q) => [q.qNum, q.section, q.preview, 'Difficult (<50%)', q.accuracy, q.correct]),
-  ];
+  doc.text('SECTION-WISE ACCURACY & MASTERY BREAKDOWN', 14, currentY);
+  currentY += 3;
 
   autoTable(doc, {
     startY: currentY,
-    head: [['Q#', 'Section', 'Question Preview', 'Difficulty Tier', 'Accuracy', 'Correct / Total']],
-    body: questionDiffRows.length > 0 ? questionDiffRows : [['-', '-', 'No questions available', '-', '-', '-']],
-    theme: 'plain',
+    head: [['Section Name', 'Questions Count', 'Max Marks', 'Avg Accuracy', 'Performance Tier']],
+    body: sectionTableRows,
+    theme: 'striped',
     headStyles: {
-      fillColor: [248, 250, 252],
-      textColor: [15, 23, 42],
+      fillColor: [0, 128, 55],
+      textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: 8,
     },
     columnStyles: {
-      0: { cellWidth: 12, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 7.5 },
-      1: { cellWidth: 26, textColor: [71, 85, 105], fontSize: 7.5 },
-      2: { cellWidth: 64, textColor: [30, 41, 59], fontSize: 7.5 },
-      3: { cellWidth: 32, fontStyle: 'bold', fontSize: 7.5 },
-      4: { cellWidth: 20, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
-      5: { cellWidth: 24, textColor: [71, 85, 105], halign: 'center', fontSize: 7.5 },
-    },
-    didParseCell: (data) => {
-      if (data.section === 'body' && data.column.index === 3) {
-        const val = data.cell.raw;
-        if (typeof val === 'string' && val.includes('Easy')) {
-          data.cell.styles.textColor = [0, 128, 55];
-        } else if (typeof val === 'string' && val.includes('Moderate')) {
-          data.cell.styles.textColor = [217, 119, 6];
-        } else if (typeof val === 'string' && val.includes('Difficult')) {
-          data.cell.styles.textColor = [225, 29, 72];
-        }
-      }
+      0: { fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 8 },
+      1: { textColor: [71, 85, 105], fontSize: 8 },
+      2: { fontStyle: 'bold', textColor: [71, 85, 105], fontSize: 8 },
+      3: { fontStyle: 'bold', textColor: [0, 128, 55], fontSize: 8, halign: 'center' },
+      4: { fontStyle: 'bold', textColor: [51, 65, 85], fontSize: 8 },
     },
     margin: { left: 14, right: 14 },
-    styles: { cellPadding: 1.8, font: 'helvetica' },
   });
 
-  // =========================================================================
-  // IF "WITH COMPLETE RESULT": COMPLETE CANDIDATE RESULTS SHEET (PAGE 5+)
+  currentY = (doc as any).lastAutoTable.finalY + 8;
+
   // =========================================================================
   if (includeResults) {
-    // --- SECTION: COMPLETE CANDIDATE RESULTS SHEET ---
-    doc.addPage();
-    const resultsPageNum = (doc.internal as any).getNumberOfPages().toString();
-    renderAtomPageDecoration(resultsPageNum);
-    currentY = 32;
+    // SECTION 5: COMPLETE CANDIDATE EXAMINATION RESULTS & SCORECARD (NO CUTOFF)
+    // =========================================================================
+    if (currentY + 35 > pageHeight - 18) {
+      doc.addPage();
+      currentY = 20;
+    }
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(15, 23, 42);
-    doc.text('9. Complete Candidate Results Sheet', 14, currentY);
-    currentY += 5;
+    doc.setFontSize(12);
+    doc.setTextColor(0, 128, 55);
+    doc.text('CANDIDATE MERIT RANK LIST & DETAILED SCORECARD', 10, currentY);
+    currentY += 4.5;
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text(`Master scorecard for all ${candidateResults.length} registered candidate(s) with contact, sectional breakdown, accuracy, and status.`, 14, currentY);
-    currentY += 6;
+    const distinctQuestionSections = Array.from(
+      new Set(
+        exam.questions
+          .map((q) => (q.section && String(q.section).trim()) || '')
+          .filter((s) => s.length > 0 && s.toLowerCase() !== 'general')
+      )
+    );
+    const hasQuestionSections = distinctQuestionSections.length > 0;
+
+    const strongSecColIdx = hasQuestionSections ? 10 : -1;
+    const avgSecColIdx = hasQuestionSections ? 11 : -1;
+    const weakSecColIdx = hasQuestionSections ? 12 : -1;
+    const resultColIdx = hasQuestionSections ? 13 : 10;
+    const tabsColIdx = hasQuestionSections ? 14 : 11;
 
     const candidateRankRows = candidateResults.map((cr, idx) => {
       const rank = cr.isAttempted ? `#${idx + 1}` : '-';
       const resultStatus = !cr.isAttempted ? 'ABSENT' : cr.isPass ? 'PASSED' : 'FAILED';
-      const scoreDisplay = cr.isAttempted ? `${formatMarks(cr.obtainedMarks)} / ${examTotalMarks}` : '-';
-      const pctDisplay = cr.isAttempted ? `${cr.percentage}%` : '-';
-      const deptSec = `${cr.candidate.department || 'Gen'}${cr.candidate.section ? ` / ${cr.candidate.section}` : ''}`;
-      const devName = cr.attempt?.deviceName || cr.candidate.deviceName || cr.candidate.deviceType || 'Laptop/PC';
-      const shortDev = devName.includes('Android (Desktop Mode)')
-        ? 'Android (Desktop)'
-        : devName.includes('iPhone (Desktop Mode)')
-        ? 'iPhone (Desktop)'
-        : devName.includes('Android')
-        ? 'Android'
-        : devName.includes('iPhone')
-        ? 'iPhone'
-        : devName.includes('iPad') || devName.includes('Tablet')
-        ? 'Tablet'
-        : 'Laptop/PC';
+      const deptSec = cr.candidate.department
+        ? (cr.candidate.section ? `${cr.candidate.department} (${cr.candidate.section})` : cr.candidate.department)
+        : (cr.candidate.section || 'General');
 
-      return [
+      const scoreDisplay = cr.isAttempted
+        ? `${formatMarks(cr.obtainedMarks)} / ${examTotalMarks}`
+        : '-';
+      const pctDisplay = cr.isAttempted
+        ? formatPct(cr.percentage)
+        : '-';
+
+      let strongSection = '-';
+      let avgSection = '-';
+      let weakSection = '-';
+
+      if (hasQuestionSections && cr.isAttempted && cr.attempt) {
+        const secScores: { name: string; obtained: number; total: number; accuracy: number }[] = [];
+        distinctQuestionSections.forEach((secName) => {
+          const secQuestions = exam.questions.filter(
+            (q) => (q.section && String(q.section).trim().toLowerCase()) === secName.toLowerCase()
+          );
+          if (secQuestions.length === 0) return;
+          let obtained = 0;
+          let total = 0;
+          secQuestions.forEach((q) => {
+            const qMarks = safeNum(q.marks, 1);
+            total += qMarks;
+            const ans = cr.attempt?.answers.find((a) => a.questionId === q.id);
+            if (ans && ans.selectedAnswer !== null && ans.selectedAnswer !== undefined) {
+              if (Number(ans.selectedAnswer) === Number(q.correctAnswer)) {
+                obtained += qMarks;
+              } else {
+                obtained -= safeNum(q.negativeMarks ?? examNegativeMarks, 0);
+              }
+            }
+          });
+          const accuracy = total > 0 ? Math.max(0, Math.round((obtained / total) * 100)) : 0;
+          secScores.push({ name: secName, obtained, total, accuracy });
+        });
+
+        if (secScores.length > 0) {
+          // Sort descending: highest accuracy first, then obtained marks
+          secScores.sort((a, b) => b.accuracy - a.accuracy || b.obtained - a.obtained);
+
+          const maxAcc = secScores[0].accuracy;
+          const minAcc = secScores[secScores.length - 1].accuracy;
+
+          const formatSecList = (items: { name: string; accuracy: number }[]) => {
+            if (items.length === 0) return '-';
+            const acc = items[0].accuracy;
+            if (items.length >= distinctQuestionSections.length && distinctQuestionSections.length >= 3) {
+              return `All (${acc}%)`;
+            }
+            const shortNames = items.map((s) => {
+              const n = s.name.trim();
+              if (n.toLowerCase() === 'mathematics') return 'Math';
+              if (n.toLowerCase() === 'quantitative aptitude') return 'Quant';
+              if (n.toLowerCase() === 'logical reasoning') return 'Logical';
+              if (n.toLowerCase() === 'reading comprehension') return 'Reading';
+              return n;
+            });
+            return `${shortNames.join(', ')} (${acc}%)`;
+          };
+
+          // 1. Strong Section(s): All sections tied with maxAcc (if maxAcc > 0)
+          if (maxAcc > 0) {
+            const topSections = secScores.filter((s) => s.accuracy === maxAcc);
+            strongSection = formatSecList(topSections);
+          }
+
+          // 2. Weak Section(s): Sections tied with minAcc (if minAcc < maxAcc, or if all are 0%)
+          if (minAcc < maxAcc) {
+            const bottomSections = secScores.filter((s) => s.accuracy === minAcc);
+            weakSection = formatSecList(bottomSections);
+          } else if (maxAcc === 0) {
+            weakSection = formatSecList(secScores);
+          }
+
+          // 3. Average Section(s): Only sections strictly between minAcc and maxAcc (and strictly > 0% and < 100%)
+          if (secScores.length >= 3 && minAcc < maxAcc) {
+            const midSections = secScores.filter((s) => s.accuracy < maxAcc && s.accuracy > minAcc && s.accuracy > 0);
+            if (midSections.length > 0) {
+              avgSection = formatSecList(midSections);
+            }
+          }
+        }
+      }
+
+      const row = [
         rank,
         cr.candidate.name,
-        cr.candidate.email || '-',
-        cr.candidate.phone || '-',
+        cr.candidate.email,
         cr.candidate.usn || '-',
-        cr.candidate.college || '-',
         deptSec,
-        shortDev,
-        cr.isAttempted ? `${cr.attempt?.answers?.length || 0}` : '-',
+        cr.submissionStatus,
         cr.isAttempted ? `${cr.correct}` : '-',
         cr.isAttempted ? `${cr.wrong}` : '-',
         scoreDisplay,
         pctDisplay,
-        resultStatus,
-        cr.isAttempted ? `${cr.tabSwitches}` : '-',
+      ];
+
+      if (hasQuestionSections) {
+        row.push(strongSection);
+        row.push(avgSection);
+        row.push(weakSection);
+      }
+
+      row.push(resultStatus);
+      row.push(cr.isAttempted ? `${cr.tabSwitches}` : '-');
+
+      return row;
+    });
+
+    const tableHeaders = [
+      'Rank', 'Candidate Name', 'Email Address', 'USN', 'Dept', 'Status', 'Corr', 'Wrong', 'Score', 'Accuracy'
+    ];
+    if (hasQuestionSections) {
+      tableHeaders.push('Strong Sec', 'Avg Sec', 'Weak Sec');
+    }
+    tableHeaders.push('Result', 'Tabs');
+
+    const colStyles = hasQuestionSections
+      ? {
+          0: { cellWidth: 7, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 6.5 },
+          1: { cellWidth: 'auto', fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 6.5 },
+          2: { cellWidth: 'auto', textColor: [71, 85, 105], fontSize: 6 },
+          3: { cellWidth: 11, textColor: [71, 85, 105], fontSize: 6 },
+          4: { cellWidth: 11, textColor: [71, 85, 105], fontSize: 6 },
+          5: { cellWidth: 14, fontStyle: 'bold', halign: 'center', fontSize: 6 },
+          6: { cellWidth: 8, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
+          7: { cellWidth: 8, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
+          8: { cellWidth: 12, fontStyle: 'bold', textColor: [30, 41, 59], halign: 'center', fontSize: 6.5 },
+          9: { cellWidth: 11, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
+          10: { cellWidth: 16, fontStyle: 'bold', halign: 'center', fontSize: 6 },
+          11: { cellWidth: 16, fontStyle: 'bold', halign: 'center', fontSize: 6 },
+          12: { cellWidth: 16, fontStyle: 'bold', halign: 'center', fontSize: 6 },
+          13: { cellWidth: 13, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
+          14: { cellWidth: 8, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
+        }
+      : {
+          0: { cellWidth: 8, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 7.5 },
+          1: { cellWidth: 'auto', fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 7.5 },
+          2: { cellWidth: 'auto', textColor: [71, 85, 105], fontSize: 7 },
+          3: { cellWidth: 14, textColor: [71, 85, 105], fontSize: 7 },
+          4: { cellWidth: 14, textColor: [71, 85, 105], fontSize: 7 },
+          5: { cellWidth: 18, fontStyle: 'bold', halign: 'center', fontSize: 7 },
+          6: { cellWidth: 10, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
+          7: { cellWidth: 10, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
+          8: { cellWidth: 16, fontStyle: 'bold', textColor: [30, 41, 59], halign: 'center', fontSize: 7.5 },
+          9: { cellWidth: 14, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
+          10: { cellWidth: 17, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
+          11: { cellWidth: 11, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
+        };
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [tableHeaders],
+      body: candidateRankRows,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [0, 128, 55],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: hasQuestionSections ? 6.5 : 7.5,
+        halign: 'center',
+        cellPadding: hasQuestionSections ? 1 : 1.2,
+      },
+      columnStyles: colStyles as any,
+      didParseCell: (data) => {
+        if (data.section === 'body') {
+          const rowRaw = data.row.raw as any[];
+          const status = rowRaw[5];
+          const isAttempted = status !== 'Not Attempted';
+
+          // Status column (col 5)
+          if (data.column.index === 5) {
+            data.cell.styles.halign = 'center';
+            data.cell.styles.fontStyle = 'bold';
+            if (status === 'Limit Exceeded') {
+              data.cell.styles.fillColor = [254, 226, 226]; // Soft Red (#FEE2E2)
+              data.cell.styles.textColor = [185, 28, 28]; // Dark Red (#B91C1C)
+            } else if (status === 'Normal Submit') {
+              data.cell.styles.fillColor = [220, 252, 231]; // Soft Green (#DCFCE7)
+              data.cell.styles.textColor = [21, 128, 61]; // Dark Green (#15803D)
+            } else {
+              data.cell.styles.fillColor = [241, 245, 249];
+              data.cell.styles.textColor = [100, 116, 139];
+            }
+          }
+
+          // Corr column (col 6) - Excel Green heat cell
+          if (data.column.index === 6) {
+            data.cell.styles.halign = 'center';
+            data.cell.styles.fontStyle = 'bold';
+            const corrVal = parseInt(data.cell.raw, 10);
+            if (isAttempted && !isNaN(corrVal)) {
+              if (corrVal > 0) {
+                data.cell.styles.fillColor = [220, 252, 231]; // Light green
+                data.cell.styles.textColor = [21, 128, 61];
+              } else {
+                data.cell.styles.fillColor = [248, 250, 252];
+                data.cell.styles.textColor = [148, 163, 184];
+              }
+            } else {
+              data.cell.styles.textColor = [148, 163, 184];
+            }
+          }
+
+          // Wrong column (col 7) - Excel Red heat cell
+          if (data.column.index === 7) {
+            data.cell.styles.halign = 'center';
+            data.cell.styles.fontStyle = 'bold';
+            const wrongVal = parseInt(data.cell.raw, 10);
+            if (isAttempted && !isNaN(wrongVal)) {
+              if (wrongVal > 0) {
+                data.cell.styles.fillColor = [254, 226, 226]; // Light red
+                data.cell.styles.textColor = [185, 28, 28];
+              } else {
+                data.cell.styles.fillColor = [240, 253, 244]; // Green clean 0 wrong
+                data.cell.styles.textColor = [22, 163, 74];
+              }
+            } else {
+              data.cell.styles.textColor = [148, 163, 184];
+            }
+          }
+
+          // Score column (col 8)
+          if (data.column.index === 8) {
+            data.cell.styles.halign = 'center';
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.textColor = isAttempted ? [30, 41, 59] : [148, 163, 184];
+          }
+
+          // Accuracy column (col 9) - Excel 3-Color Scale Heat Map
+          if (data.column.index === 9) {
+            data.cell.styles.halign = 'center';
+            data.cell.styles.fontStyle = 'bold';
+            if (isAttempted) {
+              const pctVal = parseFloat(data.cell.raw);
+              if (!isNaN(pctVal)) {
+                if (pctVal >= 75) {
+                  data.cell.styles.fillColor = [220, 252, 231]; // Excel Green heat cell
+                  data.cell.styles.textColor = [21, 128, 61];
+                } else if (pctVal >= 50) {
+                  data.cell.styles.fillColor = [254, 249, 195]; // Excel Yellow/Amber heat cell
+                  data.cell.styles.textColor = [161, 98, 7];
+                } else {
+                  data.cell.styles.fillColor = [254, 226, 226]; // Excel Red heat cell
+                  data.cell.styles.textColor = [185, 28, 28];
+                }
+              }
+            } else {
+              data.cell.styles.textColor = [148, 163, 184];
+            }
+          }
+
+          // Strong Section column (col 10 if hasQuestionSections)
+          if (strongSecColIdx !== -1 && data.column.index === strongSecColIdx) {
+            data.cell.styles.halign = 'center';
+            data.cell.styles.fontStyle = 'bold';
+            const val = data.cell.raw;
+            if (val && val !== '-') {
+              data.cell.styles.fillColor = [220, 252, 231]; // Soft Green
+              data.cell.styles.textColor = [21, 128, 61]; // Dark Green
+            } else {
+              data.cell.styles.textColor = [148, 163, 184];
+            }
+          }
+
+          // Average Section column (col 11 if hasQuestionSections)
+          if (avgSecColIdx !== -1 && data.column.index === avgSecColIdx) {
+            data.cell.styles.halign = 'center';
+            data.cell.styles.fontStyle = 'bold';
+            const val = data.cell.raw;
+            if (val && val !== '-') {
+              data.cell.styles.fillColor = [254, 249, 195]; // Soft Yellow/Amber
+              data.cell.styles.textColor = [161, 98, 7]; // Dark Amber
+            } else {
+              data.cell.styles.textColor = [148, 163, 184];
+            }
+          }
+
+          // Weak Section column (col 12 if hasQuestionSections)
+          if (weakSecColIdx !== -1 && data.column.index === weakSecColIdx) {
+            data.cell.styles.halign = 'center';
+            data.cell.styles.fontStyle = 'bold';
+            const val = data.cell.raw;
+            if (val && val !== '-') {
+              data.cell.styles.fillColor = [254, 226, 226]; // Soft Red/Pink
+              data.cell.styles.textColor = [185, 28, 28]; // Dark Red
+            } else {
+              data.cell.styles.textColor = [148, 163, 184];
+            }
+          }
+
+          // Result column - Status Badge
+          if (data.column.index === resultColIdx) {
+            data.cell.styles.halign = 'center';
+            data.cell.styles.fontStyle = 'bold';
+            const resVal = data.cell.raw;
+            if (resVal === 'PASSED') {
+              data.cell.styles.fillColor = [220, 252, 231];
+              data.cell.styles.textColor = [21, 128, 61];
+            } else if (resVal === 'FAILED') {
+              data.cell.styles.fillColor = [254, 226, 226];
+              data.cell.styles.textColor = [185, 28, 28];
+            } else {
+              data.cell.styles.fillColor = [241, 245, 249];
+              data.cell.styles.textColor = [100, 116, 139];
+            }
+          }
+
+          // Tabs column - Tab violation heat cell
+          if (data.column.index === tabsColIdx) {
+            data.cell.styles.halign = 'center';
+            data.cell.styles.fontStyle = 'bold';
+            const tabVal = parseInt(data.cell.raw, 10);
+            if (isAttempted && !isNaN(tabVal)) {
+              if (tabVal >= 3 || status === 'Limit Exceeded') {
+                data.cell.styles.fillColor = [254, 226, 226]; // Red violation
+                data.cell.styles.textColor = [185, 28, 28];
+              } else if (tabVal > 0) {
+                data.cell.styles.fillColor = [254, 249, 195]; // Amber caution
+                data.cell.styles.textColor = [161, 98, 7];
+              } else {
+                data.cell.styles.fillColor = [240, 253, 244]; // Green clean
+                data.cell.styles.textColor = [21, 128, 61];
+              }
+            } else {
+              data.cell.styles.textColor = [148, 163, 184];
+            }
+          }
+        }
+      },
+      margin: { left: 10, right: 10 },
+      styles: { cellPadding: hasQuestionSections ? 1.2 : 1.5, font: 'helvetica', fontSize: hasQuestionSections ? 6.5 : 7, overflow: 'linebreak' },
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // =========================================================================
+  // QUESTION-LEVEL DATA PREPARATION FOR CHARTS & DETAILED BREAKDOWN
+  // =========================================================================
+  const questionAnalysisList: any[] = [];
+
+  exam.questions.forEach((q, idx) => {
+    let qCorrect = 0;
+    let qWrong = 0;
+    let qSkipped = 0;
+    const optionCounts = new Array(q.options?.length || 4).fill(0);
+    const candidatesCorrect: string[] = [];
+    const candidatesWrong: string[] = [];
+    const candidatesSkipped: string[] = [];
+
+    attemptedCandidates.forEach((cr) => {
+      const candidateName = cr.candidate.name;
+      const ans = cr.attempt?.answers.find((a) => a.questionId === q.id);
+      if (!ans || ans.selectedAnswer === null || ans.selectedAnswer === undefined) {
+        qSkipped++;
+        candidatesSkipped.push(candidateName);
+      } else {
+        const chosen = Number(ans.selectedAnswer);
+        if (chosen >= 0 && chosen < optionCounts.length) {
+          optionCounts[chosen]++;
+        }
+        if (chosen === Number(q.correctAnswer)) {
+          qCorrect++;
+          candidatesCorrect.push(candidateName);
+        } else {
+          qWrong++;
+          candidatesWrong.push(candidateName);
+        }
+      }
+    });
+
+    const totalTries = attemptedCount;
+    const accuracy = totalTries > 0 ? Math.round((qCorrect / totalTries) * 100) : 0;
+    const wrongPct = totalTries > 0 ? Math.round((qWrong / totalTries) * 100) : 0;
+    const diff = accuracy >= 75 ? 'Easy' : accuracy >= 50 ? 'Moderate' : 'Challenging';
+    const correctKeyChar = String.fromCharCode(65 + (Number(q.correctAnswer) || 0));
+
+    questionAnalysisList.push({
+      qNumber: idx + 1,
+      question: q,
+      accuracy,
+      wrongPct,
+      diff,
+      correctKeyChar,
+      qCorrect,
+      qWrong,
+      qSkipped,
+      totalTries,
+      optionCounts,
+      candidatesCorrect,
+      candidatesWrong,
+      candidatesSkipped,
+    });
+  });
+
+  // =========================================================================
+  // DETAILED QUESTION-BY-QUESTION INDIVIDUAL BREAKDOWN CARDS
+  // =========================================================================
+  if (currentY + 50 > pageHeight - 18) {
+    doc.addPage();
+    currentY = 20;
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(0, 128, 55);
+  doc.text('DETAILED QUESTION-BY-QUESTION ITEM BREAKDOWN', 14, currentY);
+  currentY += 6;
+
+  questionAnalysisList.forEach((qa) => {
+    const splitQText = doc.splitTextToSize(`"${qa.question.text}"`, pageWidth - 32);
+    const qTextHeight = splitQText.length * 4.2 + 2;
+    const optionRowsCount = (qa.question.options || []).length || 4;
+    const estCardHeight = 10.5 + qTextHeight + 3.5 + (optionRowsCount + 1) * 6 + 6;
+
+    if (currentY + estCardHeight > pageHeight - 18) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    // Card Header Bar
+    doc.setFillColor(240, 253, 244);
+    doc.rect(14, currentY, pageWidth - 28, 7.5, 'F');
+    doc.setDrawColor(167, 243, 208);
+    doc.rect(14, currentY, pageWidth - 28, 7.5, 'S');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(0, 128, 55);
+    doc.text(`Question #${qa.qNumber}  [${qa.question.section || 'General'}]`, 17, currentY + 5);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(qa.diff === 'Easy' ? 5 : qa.diff === 'Challenging' ? 225 : 217, qa.diff === 'Easy' ? 150 : qa.diff === 'Challenging' ? 29 : 119, qa.diff === 'Easy' ? 105 : qa.diff === 'Challenging' ? 72 : 6);
+    doc.text(`Tier: ${qa.diff} (${qa.accuracy}% Accuracy)`, 95, currentY + 5);
+
+    doc.setTextColor(100, 116, 139);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Marks: +${qa.question.marks || 1} / -${qa.question.negativeMarks ?? examNegativeMarks}`, pageWidth - 17, currentY + 5, { align: 'right' });
+    currentY += 10.5;
+
+    // Full Question Text
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(splitQText, 16, currentY);
+    currentY += splitQText.length * 4.2 + 2;
+
+    // Metrics mini-row
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text(
+      `Correct: ${qa.qCorrect}/${qa.totalTries} (${qa.accuracy}%)  |  Incorrect: ${qa.qWrong}/${qa.totalTries} (${qa.wrongPct}%)  |  Skipped: ${qa.qSkipped}/${qa.totalTries}`,
+      16,
+      currentY
+    );
+    currentY += 3.5;
+
+    // Options Distribution Table for this question
+    const optionRows = (qa.question.options || []).map((optText: string, oIdx: number) => {
+      const isCorrect = oIdx === Number(qa.question.correctAnswer);
+      const chosenCount = qa.optionCounts[oIdx] || 0;
+      const pct = qa.totalTries > 0 ? Math.round((chosenCount / qa.totalTries) * 100) : 0;
+      const optLetter = String.fromCharCode(65 + oIdx);
+
+      return [
+        `Option ${optLetter}`,
+        optText,
+        isCorrect ? '✓ Correct Answer' : 'Incorrect Choice',
+        `${chosenCount} Candidate${chosenCount !== 1 ? 's' : ''} (${pct}%)`,
       ];
     });
 
     autoTable(doc, {
       startY: currentY,
-      head: [['Rank', 'Student Name', 'Email', 'Contact', 'USN', 'College', 'Dept/Sec', 'Device', 'Att.', 'Corr', 'Wrong', 'Score', '%', 'Result', 'Tabs']],
-      body: candidateRankRows,
-      theme: 'plain',
+      head: [['Option', 'Option Text', 'Status', 'Candidates Selected']],
+      body: optionRows,
+      theme: 'grid',
       headStyles: {
-        fillColor: [248, 250, 252],
-        textColor: [15, 23, 42],
+        fillColor: [241, 245, 249],
+        textColor: [51, 65, 85],
         fontStyle: 'bold',
-        fontSize: 6.5,
+        fontSize: 7,
       },
       columnStyles: {
-        0: { cellWidth: 8, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 6.5 },
-        1: { cellWidth: 24, fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 6.5 },
-        2: { cellWidth: 24, textColor: [71, 85, 105], fontSize: 6 },
-        3: { cellWidth: 16, textColor: [71, 85, 105], fontStyle: 'bold', fontSize: 6 },
-        4: { cellWidth: 15, textColor: [71, 85, 105], fontSize: 6 },
-        5: { cellWidth: 16, textColor: [71, 85, 105], fontSize: 6 },
-        6: { cellWidth: 14, textColor: [71, 85, 105], fontSize: 6 },
-        7: { cellWidth: 14, fontStyle: 'bold', textColor: [71, 85, 105], halign: 'center', fontSize: 5.5 },
-        8: { cellWidth: 8, textColor: [71, 85, 105], halign: 'center', fontSize: 6.5 },
-        9: { cellWidth: 8, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 6.5 },
-        10: { cellWidth: 8, fontStyle: 'bold', textColor: [225, 29, 72], halign: 'center', fontSize: 6.5 },
-        11: { cellWidth: 14, fontStyle: 'bold', textColor: [30, 41, 59], halign: 'center', fontSize: 6.5 },
-        12: { cellWidth: 9, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 6.5 },
-        13: { cellWidth: 12, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
-        14: { cellWidth: 6, textColor: [100, 116, 139], halign: 'center', fontSize: 6.5 },
-      },
-      didDrawPage: (data) => {
-        if (data.pageNumber >= 5) {
-          renderAtomPageDecoration(data.pageNumber.toString());
-        }
+        0: { cellWidth: 20, fontStyle: 'bold', textColor: [0, 128, 55], fontSize: 7 },
+        1: { cellWidth: 'auto', textColor: [30, 41, 59], fontSize: 7 },
+        2: { cellWidth: 32, fontStyle: 'bold', fontSize: 7 },
+        3: { cellWidth: 42, fontStyle: 'bold', textColor: [71, 85, 105], halign: 'center', fontSize: 7 },
       },
       didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 12) {
-          const val = data.cell.raw;
-          if (val === 'PASSED') {
+        if (data.section === 'body' && data.column.index === 2) {
+          if (data.cell.raw === '✓ Correct Answer') {
             data.cell.styles.textColor = [0, 128, 55];
-            data.cell.styles.fontStyle = 'bold';
-          } else if (val === 'FAILED') {
-            data.cell.styles.textColor = [225, 29, 72];
-            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = [236, 253, 245];
           } else {
-            data.cell.styles.textColor = [148, 163, 184];
+            data.cell.styles.textColor = [156, 163, 175];
           }
         }
       },
-      margin: { left: 8, right: 8, top: 32, bottom: 20 },
-      styles: { cellPadding: 1.2, font: 'helvetica' },
+      margin: { left: 16, right: 16 },
+      styles: { cellPadding: 1.5, font: 'helvetica' },
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 7;
+  });
+
+  // =========================================================================
+  // SECTION 7: 3D VISUAL ANALYTICS & CHARTS GALLERY (AT THE VERY LAST / END)
+  // =========================================================================
+
+  // --- 3D Visual Analytics & Charts Gallery ---
+  doc.addPage();
+  currentY = 20;
+
+  // Gallery Section Banner
+  doc.setFillColor(0, 128, 55);
+  doc.rect(14, currentY, pageWidth - 28, 9, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(255, 255, 255);
+  doc.text('EXAMINATION 3D VISUAL ANALYTICS & CHARTS GALLERY', 18, currentY + 6.2);
+  currentY += 13;
+
+  const galleryChartHeight = 72;
+
+  // Graph 1: 3D Score Distribution Chart
+  const scoreDistChartImg = createScoreDistributionChart(
+    attemptedCandidates.map((c) => safeNum(c.percentage)),
+    attemptedCount
+  );
+  if (scoreDistChartImg) {
+    doc.addImage(scoreDistChartImg, 'PNG', 14, currentY, pageWidth - 28, galleryChartHeight);
+    currentY += galleryChartHeight + 6;
+  }
+
+  // Row 2: 3D Pass vs Fail Qualification Donut & 3D Section-Wise Accuracy Performance Chart
+  const passFailDonutImg = createPassFailDonutChart(passCount, failCount, notAttemptedCount, totalTargetCandidates);
+  if (passFailDonutImg) {
+    doc.addImage(passFailDonutImg, 'PNG', 14, currentY, (pageWidth - 32) / 2, galleryChartHeight);
+  }
+
+  const sectionChartImg = createSectionAccuracyChart(sectionStats);
+  if (sectionChartImg) {
+    doc.addImage(sectionChartImg, 'PNG', 14 + (pageWidth - 32) / 2 + 4, currentY, (pageWidth - 32) / 2, galleryChartHeight);
+  }
+  currentY += galleryChartHeight + 6;
+
+  // Department Stats Data
+  const deptMap = new Map<string, typeof attemptedCandidates>();
+  attemptedCandidates.forEach((cr) => {
+    const dept = cr.candidate.department || 'General';
+    if (!deptMap.has(dept)) deptMap.set(dept, []);
+    deptMap.get(dept)!.push(cr);
+  });
+
+  const deptStats: { department: string; avgScore: number; count: number }[] = [];
+  deptMap.forEach((cands, dept) => {
+    const avgPct = cands.length > 0 ? Math.round(cands.reduce((sum, c) => sum + safeNum(c.percentage), 0) / cands.length) : 0;
+    deptStats.push({ department: dept, avgScore: avgPct, count: cands.length });
+  });
+
+  // Graph 3: 3D Department-Wise Performance Comparison Chart
+  const deptChartImg = createDepartmentPerformanceChart(deptStats);
+  if (deptChartImg) {
+    doc.addImage(deptChartImg, 'PNG', 14, currentY, pageWidth - 28, galleryChartHeight);
+  }
+
+  
+  // =========================================================================
+  // OPTIONAL: COMPARATIVE ANALYSIS BENCHMARK PAGE
+  // =========================================================================
+  if (options?.comparisonExamData) {
+    const compData = options.comparisonExamData;
+    doc.addPage();
+    currentY = 20;
+
+    doc.setFillColor(0, 128, 55);
+    doc.rect(14, currentY, pageWidth - 28, 9, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(255, 255, 255);
+    doc.text('COMPARATIVE BENCHMARK ANALYSIS', 18, currentY + 6.2);
+    currentY += 13;
+
+    const otherCandidates = compData.candidates || [];
+    const otherResults = compData.results || [];
+    const otherAttempts = compData.attempts || [];
+    const otherTotalAttempts = otherAttempts.filter((a) => a.isSubmitted).length;
+    const otherPassCount = otherResults.filter((r) => r.percentage >= 50).length;
+    const otherPassRate = otherTotalAttempts > 0 ? Math.round((otherPassCount / otherTotalAttempts) * 100) : 0;
+    const otherAvgScore = otherResults.length > 0 ? Math.round(otherResults.reduce((s, r) => s + r.percentage, 0) / otherResults.length) : 0;
+    const otherIntegrityRate = otherTotalAttempts > 0 ? Math.round((otherAttempts.filter((a) => (a.tabSwitches || 0) === 0).length / otherTotalAttempts) * 100) : 0;
+    const myIntegrityRate = attemptedCount > 0 ? Math.round((attemptedCandidates.filter((c) => safeNum(c.tabSwitches) === 0).length / attemptedCount) * 100) : 0;
+
+    const compChartImg = createAtomComparativeChart(
+      [
+        { label: 'Turnout Rate', val1: Math.round(turnoutRate), val2: otherCandidates.length > 0 ? Math.round((otherTotalAttempts / otherCandidates.length) * 100) : 0 },
+        { label: 'Pass Rate', val1: Math.round(passRate), val2: otherPassRate },
+        { label: 'Avg Score', val1: Math.round(avgPercentage), val2: otherAvgScore },
+        { label: 'Integrity Rate', val1: myIntegrityRate, val2: otherIntegrityRate },
+      ],
+      exam.name,
+      compData.exam.name
+    );
+
+    if (compChartImg) {
+      doc.addImage(compChartImg, 'PNG', 14, currentY, pageWidth - 28, 95);
+      currentY += 105;
+    }
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [['Benchmark Metric', `${exam.name} (${exam.code})`, `${compData.exam.name} (${compData.exam.code})`, 'Delta / Variance']],
+      body: [
+        ['Registered Candidates', `${totalTargetCandidates}`, `${otherCandidates.length}`, `${totalTargetCandidates - otherCandidates.length}`],
+        ['Attempted / Submissions', `${attemptedCount} (${Math.round(turnoutRate)}%)`, `${otherTotalAttempts}`, `${attemptedCount - otherTotalAttempts}`],
+        ['Pass Rate', `${Math.round(passRate)}%`, `${otherPassRate}%`, `${Math.round(passRate) - otherPassRate}%`],
+        ['Average Score', `${Math.round(avgPercentage)}%`, `${otherAvgScore}%`, `${Math.round(avgPercentage) - otherAvgScore}%`],
+        ['Clean Integrity (0 tabs)', `${myIntegrityRate}%`, `${otherIntegrityRate}%`, `${myIntegrityRate - otherIntegrityRate}%`],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: [0, 128, 55], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+      margin: { left: 14, right: 14 },
+      styles: { cellPadding: 2, font: 'helvetica', fontSize: 8 },
     });
   }
 
   // =========================================================================
-  // COMPARATIVE ANALYSIS SECTION (COMING LAST IF COMPARISON EXAM DATA IS PROVIDED)
+  // FOOTER & PAGE NUMBERING ON ALL PAGES
   // =========================================================================
-  if (options?.comparisonExamData) {
-    const compData = options.comparisonExamData;
-    const compExam = compData.exam;
-    const compCandidates = compData.candidates || [];
-    const compResults = compData.results || [];
-    const compAttempts = compData.attempts || [];
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    const pWidth = doc.internal.pageSize.getWidth();
+    const pHeight = doc.internal.pageSize.getHeight();
 
-    const compExamTotalMarks = compExam.questions?.reduce((sum, q) => sum + (safeNum(q.marks) || 1), 0) || 0;
-
-    // Calculate Exam 2 metrics
-    const compCandidateResults = compCandidates.map((c) => {
-      const attempt = compAttempts.find((a) => a.candidateId === c.id);
-      const result = compResults.find((r) => r.candidateId === c.id);
-      const isAttempted = !!attempt && (attempt.isSubmitted || (attempt.answers && attempt.answers.length > 0));
-      const percentage = safeNum(result?.percentage, 0);
-      const isPass = percentage >= 50;
-
-      let timeTakenMinutes = 0;
-      if (attempt?.startedAt && attempt?.submittedAt) {
-        const s = new Date(attempt.startedAt).getTime();
-        const e = new Date(attempt.submittedAt).getTime();
-        if (e > s) timeTakenMinutes = Math.max(1, Math.round((e - s) / 60000));
-      }
-
-      return { candidate: c, isAttempted, percentage, isPass, timeTakenMinutes, result, attempt };
-    });
-
-    const compAttempted = compCandidateResults.filter((cr) => cr.isAttempted);
-    const compAttemptedCount = compAttempted.length;
-    const compTotalRegistered = compCandidates.length;
-    const compCompletionRate = compTotalRegistered > 0 ? ((compAttemptedCount / compTotalRegistered) * 100).toFixed(1) : '0';
-    const compPassCount = compAttempted.filter((cr) => cr.isPass).length;
-    const compPassRate = compAttemptedCount > 0 ? Math.round((compPassCount / compAttemptedCount) * 100) : 0;
-    const compAvgPercentage = compAttemptedCount > 0
-      ? (compAttempted.reduce((sum, cr) => sum + cr.percentage, 0) / compAttemptedCount).toFixed(1)
-      : '0';
-    const compHighestPercentage = compAttemptedCount > 0
-      ? Math.max(...compAttempted.map((cr) => cr.percentage)).toFixed(0)
-      : '0';
-    const compLowestPercentage = compAttemptedCount > 0
-      ? Math.min(...compAttempted.map((cr) => cr.percentage)).toFixed(0)
-      : '0';
-    const compAvgTime = compAttemptedCount > 0
-      ? Math.round(compAttempted.reduce((sum, cr) => sum + cr.timeTakenMinutes, 0) / compAttemptedCount)
-      : 0;
-
-    // Match Common Candidates between Exam 1 and Exam 2 (by email or USN)
-    const commonCandidates: any[] = [];
-    candidateResults.forEach((cr1) => {
-      const match = compCandidateResults.find(
-        (cr2) =>
-          (cr1.candidate.email && cr2.candidate.email && cr1.candidate.email.trim().toLowerCase() === cr2.candidate.email.trim().toLowerCase()) ||
-          (cr1.candidate.usn && cr2.candidate.usn && cr1.candidate.usn.trim().toLowerCase() === cr2.candidate.usn.trim().toLowerCase())
-      );
-      if (match && cr1.isAttempted && match.isAttempted) {
-        const delta = Math.round((cr1.percentage - match.percentage) * 10) / 10;
-        commonCandidates.push({
-          name: cr1.candidate.name,
-          usn: cr1.candidate.usn || match.candidate.usn || '-',
-          phone: cr1.candidate.phone || match.candidate.phone || '-',
-          exam1Score: cr1.percentage,
-          exam2Score: match.percentage,
-          delta,
-          trend: delta > 0 ? '▲ Improved' : delta < 0 ? '▼ Declined' : '▬ Steady',
-        });
-      }
-    });
-
-    // Add Comparative Page at the very end
-    doc.addPage();
-    const compPageNum = (doc.internal as any).getNumberOfPages().toString();
-    renderAtomPageDecoration(compPageNum);
-    currentY = 32;
-
-    const compSectionTitle = includeResults ? '10. Comparative Analysis: Cross-Exam Performance' : '9. Comparative Analysis: Cross-Exam Performance';
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.setTextColor(15, 23, 42);
-    doc.text(compSectionTitle, 14, currentY);
-    currentY += 5;
+    doc.setFillColor(0, 128, 55);
+    doc.rect(10, pHeight - 12, pWidth - 20, 0.4, 'F');
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text(`Comparative benchmarking between ${exam.name} (${exam.code}) and ${compExam.name} (${compExam.code}):`, 14, currentY);
-    currentY += 5;
-
-    // Comparison KPI Table
-    const diffCalc = (v1: number, v2: number, suffix: string = '%') => {
-      const diff = Math.round((v1 - v2) * 10) / 10;
-      return diff > 0 ? `+${diff}${suffix} ▲` : diff < 0 ? `${diff}${suffix} ▼` : `0${suffix} ▬`;
-    };
-
-    const compTableBody = [
-      ['Total Candidates Registered', `${totalTargetCandidates}`, `${compTotalRegistered}`, `${totalTargetCandidates - compTotalRegistered}`],
-      ['Candidates Appeared / Attempted', `${attemptedCount}`, `${compAttemptedCount}`, `${attemptedCount - compAttemptedCount}`],
-      ['Completion Rate', `${completionRate}%`, `${compCompletionRate}%`, diffCalc(safeNum(completionRate), safeNum(compCompletionRate))],
-      ['Average Score (%)', `${avgPercentage}%`, `${compAvgPercentage}%`, diffCalc(safeNum(avgPercentage), safeNum(compAvgPercentage))],
-      ['Pass Rate (%)', `${passRate}%`, `${compPassRate}%`, diffCalc(safeNum(passRate), safeNum(compPassRate))],
-      ['Highest Score (%)', `${highestPercentage}%`, `${compHighestPercentage}%`, diffCalc(safeNum(highestPercentage), safeNum(compHighestPercentage))],
-      ['Lowest Score (%)', `${lowestPercentage}%`, `${compLowestPercentage}%`, diffCalc(safeNum(lowestPercentage), safeNum(compLowestPercentage))],
-      ['Average Time Taken', `${avgTimeTakenMin} min`, `${compAvgTime} min`, `${avgTimeTakenMin - compAvgTime} min`],
-      ['Total Questions & Max Marks', `${totalQuestions} Qs (${examTotalMarks} M)`, `${compExam.questions?.length || 0} Qs (${compExamTotalMarks} M)`, '-'],
-    ];
-
-    autoTable(doc, {
-      startY: currentY,
-      head: [['Metric / Parameter', `${exam.name} (${exam.code})`, `${compExam.name} (${compExam.code})`, 'Variance / Delta (Δ)']],
-      body: compTableBody,
-      theme: 'plain',
-      headStyles: {
-        fillColor: [248, 250, 252],
-        textColor: [15, 23, 42],
-        fontStyle: 'bold',
-        fontSize: 7.5,
-      },
-      columnStyles: {
-        0: { cellWidth: 55, fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 7 },
-        1: { cellWidth: 44, fontStyle: 'bold', textColor: [0, 128, 55], fontSize: 7 },
-        2: { cellWidth: 44, fontStyle: 'bold', textColor: [37, 99, 235], fontSize: 7 },
-        3: { cellWidth: 39, fontStyle: 'bold', textColor: [15, 23, 42], fontSize: 7 },
-      },
-      margin: { left: 14, right: 14 },
-      styles: { cellPadding: 1.6, font: 'helvetica' },
-    });
-
-    currentY = (doc as any).lastAutoTable.finalY + 5;
-
-    // Comparative 3D Chart
-    const compChartImg = createAtomComparativeChart(
-      `${exam.name} (${exam.code})`,
-      `${compExam.name} (${compExam.code})`,
-      [
-        { label: 'Avg Score', val1: safeNum(avgPercentage), val2: safeNum(compAvgPercentage) },
-        { label: 'Pass Rate', val1: safeNum(passRate), val2: safeNum(compPassRate) },
-        { label: 'Completion', val1: safeNum(completionRate), val2: safeNum(compCompletionRate) },
-        { label: 'Top Score', val1: safeNum(highestPercentage), val2: safeNum(compHighestPercentage) },
-      ]
+    doc.setFontSize(7.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text(
+      `ATOM SHAALE • Confidential Examination Report • Exam: ${exam.name} (${exam.code})`,
+      10,
+      pHeight - 7
     );
-
-    if (compChartImg) {
-      const compChartH = 65;
-      doc.addImage(compChartImg, 'PNG', 14, currentY, pageWidth - 28, compChartH);
-      currentY += compChartH + 5;
-    }
-
-    // Common Candidates Progress Table (if common candidates exist)
-    if (commonCandidates.length > 0) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10.5);
-      doc.setTextColor(15, 23, 42);
-      doc.text(`Common Candidates Cross-Exam Tracking (${commonCandidates.length} Candidates in Both Exams)`, 14, currentY);
-      currentY += 4;
-
-      const commonRows = commonCandidates.slice(0, 6).map((cc, cIdx) => [
-        `#${cIdx + 1}`,
-        cc.name,
-        cc.usn,
-        cc.phone,
-        `${cc.exam1Score}%`,
-        `${cc.exam2Score}%`,
-        `${cc.delta > 0 ? `+${cc.delta}%` : `${cc.delta}%`}`,
-        cc.trend,
-      ]);
-
-      autoTable(doc, {
-        startY: currentY,
-        head: [['#', 'Student Name', 'USN', 'Contact', `${exam.code}`, `${compExam.code}`, 'Delta (Δ)', 'Trend']],
-        body: commonRows,
-        theme: 'plain',
-        headStyles: {
-          fillColor: [248, 250, 252],
-          textColor: [15, 23, 42],
-          fontStyle: 'bold',
-          fontSize: 7,
-        },
-        columnStyles: {
-          0: { cellWidth: 8, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 6.5 },
-          1: { cellWidth: 36, fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 6.5 },
-          2: { cellWidth: 24, textColor: [71, 85, 105], fontSize: 6.5 },
-          3: { cellWidth: 26, textColor: [71, 85, 105], fontStyle: 'bold', fontSize: 6.5 },
-          4: { cellWidth: 22, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 6.5 },
-          5: { cellWidth: 22, fontStyle: 'bold', textColor: [37, 99, 235], halign: 'center', fontSize: 6.5 },
-          6: { cellWidth: 20, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
-          7: { cellWidth: 24, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
-        },
-        didParseCell: (data) => {
-          if (data.section === 'body' && (data.column.index === 6 || data.column.index === 7)) {
-            const raw = String(data.cell.raw);
-            if (raw.includes('+') || raw.includes('Improved')) {
-              data.cell.styles.textColor = [0, 128, 55];
-            } else if (raw.includes('-') || raw.includes('Declined')) {
-              data.cell.styles.textColor = [225, 29, 72];
-            }
-          }
-        },
-        margin: { left: 14, right: 14 },
-        styles: { cellPadding: 1.4, font: 'helvetica' },
-      });
-    }
+    doc.text(
+      `Page ${i} of ${totalPages}`,
+      pWidth - 10,
+      pHeight - 7,
+      { align: 'right' }
+    );
   }
 
   // Clean filename
   const cleanName = exam.name.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const filename = `${cleanName}_ATOM_Report_${includeResults ? 'With_Complete_Results' : 'Without_Results'}_${isFiltered ? 'Filtered' : 'Full'}.pdf`;
+  const filename = `${cleanName}_Comprehensive_Exam_Report_${isFiltered ? 'Filtered' : 'Full'}.pdf`;
 
   doc.save(filename);
 }
 
-/**
- * EXPORT EXAM QUESTION PAPER AS PROFESSIONAL PDF
- * Preserves code snippets, programs, line breaks, indentation, and alignment.
- */
 export async function exportQuestionPaperPdf(
   exam: Exam,
   options?: { showAnswers?: boolean }
@@ -1650,11 +1737,11 @@ export async function exportQuestionPaperPdf(
 
   const pageWidth = 210;
   const pageHeight = 297;
-  const leftMargin = 14;
-  const rightMargin = 14;
-  const topMargin = 22;
-  const bottomMargin = 22;
-  const contentWidth = pageWidth - leftMargin - rightMargin; // 182mm
+  const leftMargin = 12;
+  const rightMargin = 12;
+  const topMargin = 16;
+  const bottomMargin = 14;
+  const contentWidth = pageWidth - leftMargin - rightMargin; // 186mm
 
   const logoDataUrl = await getLogoDataUrl();
   const examNegMarks = exam.settings?.negativeMarks ?? 0;
@@ -1664,47 +1751,41 @@ export async function exportQuestionPaperPdf(
 
   // Helper to draw branded header and footer on every page
   const drawPageHeaderAndFooter = (isFirstPage: boolean) => {
-    // Top right corner triangle accent
-    doc.setFillColor(245, 158, 11);
-    doc.triangle(pageWidth, 0, pageWidth - 26, 0, pageWidth, 20, 'F');
-    doc.setFillColor(0, 128, 55);
-    doc.triangle(pageWidth, 0, pageWidth - 12, 0, pageWidth, 9, 'F');
-
     // Logo / Brand on left
     if (logoDataUrl) {
       try {
-        doc.addImage(logoDataUrl, 'PNG', leftMargin, 6, 32, 12);
+        doc.addImage(logoDataUrl, 'PNG', leftMargin, 4, 30, 10);
       } catch (e) {
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(14);
+        doc.setFontSize(13);
         doc.setTextColor(0, 128, 55);
-        doc.text('ATOM QMS', leftMargin, 14);
+        doc.text('ATOM QMS', leftMargin, 11);
       }
     } else {
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(14);
+      doc.setFontSize(13);
       doc.setTextColor(0, 128, 55);
-      doc.text('ATOM QMS', leftMargin, 14);
+      doc.text('ATOM QMS', leftMargin, 11);
     }
 
     // Top Header line on subsequent pages
     if (!isFirstPage) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
+      doc.setFontSize(8);
       doc.setTextColor(100, 116, 139);
-      doc.text(`${exam.name} (${exam.code}) - Question Paper`, leftMargin + 36, 12);
+      doc.text(`${exam.name} (${exam.code}) - Question Paper`, leftMargin + 34, 10.5);
       doc.setDrawColor(226, 232, 240);
-      doc.line(leftMargin, 18, pageWidth - rightMargin, 18);
+      doc.line(leftMargin, 14.5, pageWidth - rightMargin, 14.5);
     }
 
     // Footer line & text
     doc.setDrawColor(226, 232, 240);
-    doc.line(leftMargin, pageHeight - 14, pageWidth - rightMargin, pageHeight - 14);
+    doc.line(leftMargin, pageHeight - 10, pageWidth - rightMargin, pageHeight - 10);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(100, 116, 139);
-    doc.text('ATOM QMS | Confidential Exam Material | www.atomm.in', leftMargin, pageHeight - 9);
+    doc.text('ATOM QMS | Confidential Exam Material | www.atomm.in', leftMargin, pageHeight - 6);
   };
 
   // Check available height and create new page if needed
@@ -1712,61 +1793,58 @@ export async function exportQuestionPaperPdf(
     if (currentY + neededHeight > pageHeight - bottomMargin) {
       doc.addPage();
       drawPageHeaderAndFooter(false);
-      currentY = topMargin + 2;
+      currentY = topMargin;
     }
   };
 
   // Draw Page 1 Header
   drawPageHeaderAndFooter(true);
-  currentY = 24;
+  currentY = 18;
 
   // Title Banner
   doc.setFillColor(0, 128, 55);
-  doc.roundedRect(leftMargin, currentY, contentWidth, 18, 2, 2, 'F');
+  doc.roundedRect(leftMargin, currentY, contentWidth, 16, 2, 2, 'F');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
+  doc.setFontSize(13);
   doc.setTextColor(255, 255, 255);
-  doc.text('EXAM QUESTION PAPER', leftMargin + 6, currentY + 7);
+  doc.text('EXAM QUESTION PAPER', leftMargin + 6, currentY + 6.5);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(240, 253, 244);
   doc.text(
     `${exam.name}  |  Code: ${exam.code}  |  Duration: ${exam.settings?.duration || 60} Mins  |  Total Marks: ${totalMarks}`,
     leftMargin + 6,
-    currentY + 13
+    currentY + 12
   );
 
-  currentY += 23;
+  currentY += 19;
 
   // Instructions Box
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(leftMargin, currentY, contentWidth, 14, 1.5, 1.5, 'FD');
+  doc.roundedRect(leftMargin, currentY, contentWidth, 12, 1.5, 1.5, 'FD');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor(30, 41, 59);
-  doc.text('Instructions & Guidelines:', leftMargin + 4, currentY + 4.5);
+  doc.text('Instructions & Guidelines:', leftMargin + 4, currentY + 4);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
   doc.setTextColor(71, 85, 105);
   doc.text(
-    `• Total Questions: ${exam.questions.length} | Passing: 50% | Negative marking: ${examNegMarks > 0 ? `-${examNegMarks} per wrong answer` : 'None'}`,
+    `• Total Questions: ${exam.questions.length} | Passing: 50% | Negative marking: ${examNegMarks > 0 ? `-${examNegMarks} per wrong answer` : 'None'} | Whitespace & code indentation strictly aligned.`,
     leftMargin + 4,
-    currentY + 8.5
-  );
-  doc.text(
-    `• For programming questions, code indentation, line breaks, and whitespace formatting are precisely aligned.`,
-    leftMargin + 4,
-    currentY + 11.5
+    currentY + 8
   );
 
-  currentY += 18;
+  currentY += 16;
 
-  // Render each question
+  // Render questions grouped with visual card styling matching the exam review UI
+  let lastSection: string | null = null;
+
   exam.questions.forEach((q, idx) => {
     const qNum = idx + 1;
     const marks = q.marks || 1;
@@ -1776,196 +1854,374 @@ export async function exportQuestionPaperPdf(
     // Parse question text into prose and code blocks
     const contentBlocks = parseQuestionContent(q.text || '');
 
-    // Estimate height needed for this question header
-    ensureSpace(32);
+    // Card dimensions
+    const cardLeft = leftMargin;
+    const cardWidth = contentWidth; // 186mm
+    const cardPad = 3.5;
+    const innerLeft = cardLeft + cardPad;
+    const innerWidth = cardWidth - (cardPad * 2); // 179mm
 
-    // Question Header Strip
-    doc.setFillColor(241, 245, 249);
-    doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(leftMargin, currentY, contentWidth, 7, 1, 1, 'FD');
+    // Measure prompt
+    let hasFirstText = false;
+    let promptLines: string[] = [];
+    let promptH = 5.0;
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.setTextColor(0, 128, 55);
-    doc.text(`Question ${qNum}`, leftMargin + 3, currentY + 4.8);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(71, 85, 105);
-    const metaText = `Type: ${typeLabel}   |   Marks: +${marks}${negMarks > 0 ? `   |   Negative: -${negMarks}` : ''}${q.section ? `   |   Section: ${q.section}` : ''}`;
-    doc.text(metaText, pageWidth - rightMargin - 3, currentY + 4.8, { align: 'right' });
-
-    currentY += 10;
-
-    // Reading Passage if RC
-    if (q.type === 'reading-comprehension' && q.passage) {
-      ensureSpace(20);
-      doc.setFillColor(248, 250, 252);
-      doc.setDrawColor(203, 213, 225);
-
-      const passageLines = doc.splitTextToSize(`Passage: ${q.passage}`, contentWidth - 8);
-      const passageBoxHeight = Math.min(60, passageLines.length * 3.8 + 6);
-
-      doc.roundedRect(leftMargin, currentY, contentWidth, passageBoxHeight, 1, 1, 'FD');
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(8);
-      doc.setTextColor(51, 65, 85);
-      doc.text(passageLines.slice(0, 14), leftMargin + 4, currentY + 4.5);
-      currentY += passageBoxHeight + 3;
+    if (contentBlocks.length > 0 && contentBlocks[0].type === 'text') {
+      hasFirstText = true;
+      const cleanFirst = contentBlocks[0].content.replace(/^Q?\d+[\.\:]\s*/i, '');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      promptLines = doc.splitTextToSize(`Q${qNum}. ${cleanFirst}`, innerWidth);
+      promptH = promptLines.length * 4.0 + 1.5;
     }
 
-    // Question Image if available
+    // Measure Reading Passage
+    let passageH = 0;
+    let passageLines: string[] = [];
+    if (q.type === 'reading-comprehension' && q.passage) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      passageLines = doc.splitTextToSize(`Passage: ${q.passage}`, innerWidth - 6);
+      passageH = Math.min(42, passageLines.length * 3.4 + 7) + 2.0;
+    }
+
+    // Measure Question Image
+    let imgH = 0;
+    if (q.imageUrl) {
+      imgH = 30 + 2.0;
+    }
+
+    // Measure Code & Subsequent Text Blocks
+    let blocksH = 0;
+    contentBlocks.forEach((block, bIdx) => {
+      if (bIdx === 0 && hasFirstText) return;
+      if (block.type === 'code') {
+        const rawLines = block.content.split('\n');
+        blocksH += 4.8 + (rawLines.length * 3.4) + 2.5 + 2.0;
+      } else {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        const tLines = doc.splitTextToSize(block.content, innerWidth);
+        blocksH += (tLines.length * 4.0) + 1.2;
+      }
+    });
+
+    // Badges Bar Height
+    const badgesH = 4.2 + 2.0;
+
+    // Measure Options (2-Column Grid)
+    const colGap = 3.5;
+    const colW = (innerWidth - colGap) / 2; // ~87.7mm
+    const optList = (q.type === 'true-false' ? q.options.slice(0, 2) : q.options);
+
+    const calcOptHeight = (optIdx: number): number => {
+      if (optIdx >= optList.length) return 7;
+      const isCorrect = q.correctAnswer === optIdx;
+      const optText = optList[optIdx] ?? '';
+      const fallback = q.type === 'true-false' ? (optIdx === 0 ? 'True' : 'False') : `Option ${String.fromCharCode(65 + optIdx)}`;
+      doc.setFont('helvetica', isCorrect && showAnswers ? 'bold' : 'normal');
+      doc.setFontSize(8);
+      const lines = doc.splitTextToSize(optText.trim() || fallback, colW - 10);
+      const textH = lines.length * 3.6 + 3.0;
+      const correctExtra = (showAnswers && isCorrect) ? 3.5 : 0;
+      const imgExtra = (q.type === 'mcq-image' && q.optionImages?.[optIdx]) ? 18 : 0;
+      return Math.max(7.2, textH + correctExtra + imgExtra);
+    };
+
+    const row0H = Math.max(calcOptHeight(0), optList.length > 1 ? calcOptHeight(1) : 0);
+    const row1H = optList.length > 2 ? Math.max(calcOptHeight(2), optList.length > 3 ? calcOptHeight(3) : 0) : 0;
+    const optionsH = row0H + (optList.length > 2 ? row1H + 2.0 : 0);
+
+    // Total Card Height
+    const totalCardHeight = (cardPad * 2) + promptH + passageH + imgH + blocksH + badgesH + optionsH;
+
+    // Check if section header is needed
+    const currentSectionName = (q.section && q.section.trim()) || '';
+    const isNewSection = Boolean(
+      currentSectionName &&
+      currentSectionName !== lastSection &&
+      currentSectionName !== 'General' &&
+      currentSectionName !== 'Unsorted'
+    );
+    const sectionHeaderH = isNewSection ? 9.5 : 0;
+
+    // Total space needed for question (+ section header if new)
+    const totalNeeded = sectionHeaderH + totalCardHeight;
+    const maxPageUsable = pageHeight - bottomMargin - topMargin;
+
+    // Decide page break BEFORE printing section header or question
+    if (currentY + totalNeeded > pageHeight - bottomMargin) {
+      if (totalCardHeight <= maxPageUsable) {
+        doc.addPage();
+        drawPageHeaderAndFooter(false);
+        currentY = topMargin;
+      } else if (currentY + 45 > pageHeight - bottomMargin) {
+        doc.addPage();
+        drawPageHeaderAndFooter(false);
+        currentY = topMargin;
+      }
+    }
+
+    // Now render Section Header (GUARANTEED on same page as question)
+    if (isNewSection) {
+      lastSection = currentSectionName;
+      doc.setFillColor(0, 128, 55);
+      doc.rect(leftMargin, currentY, 2.5, 6, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11.5);
+      doc.setTextColor(0, 128, 55);
+      doc.text(currentSectionName, leftMargin + 5, currentY + 4.8);
+      currentY += 8.5;
+    }
+
+    // Draw Outer Rounded Card Container
+    const cardTop = currentY;
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(226, 232, 240); // slate-200 subtle border
+    doc.roundedRect(cardLeft, cardTop, cardWidth, totalCardHeight, 2, 2, 'FD');
+
+    let itemY = cardTop + cardPad;
+
+    // A. Render Prompt Header
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    const prefixStr = `Q${qNum}. `;
+    const prefixW = doc.getTextWidth(prefixStr);
+
+    if (hasFirstText) {
+      doc.setTextColor(0, 128, 55);
+      doc.text(prefixStr, innerLeft, itemY + 3.8);
+
+      doc.setTextColor(15, 23, 42);
+      const line0Rest = promptLines[0].substring(prefixStr.length);
+      doc.text(line0Rest, innerLeft + prefixW, itemY + 3.8);
+
+      let textY = itemY + 3.8 + 4.0;
+      for (let l = 1; l < promptLines.length; l++) {
+        doc.text(promptLines[l], innerLeft, textY);
+        textY += 4.0;
+      }
+      itemY = textY - 4.0 + 2.0;
+    } else {
+      doc.setTextColor(0, 128, 55);
+      doc.text(prefixStr, innerLeft, itemY + 3.8);
+      itemY += 5.0;
+    }
+
+    // B. Render Reading Passage (if RC)
+    if (q.type === 'reading-comprehension' && q.passage) {
+      const pBoxH = Math.min(42, passageLines.length * 3.4 + 7);
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(innerLeft, itemY, innerWidth, pBoxH, 1.2, 1.2, 'FD');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(30, 41, 59);
+      doc.text('Reading Passage:', innerLeft + 3.5, itemY + 3.8);
+
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(71, 85, 105);
+      doc.text(passageLines.slice(0, 10), innerLeft + 3.5, itemY + 7.2);
+
+      itemY += pBoxH + 2.0;
+    }
+
+    // C. Render Question Image (if any)
     if (q.imageUrl) {
       try {
-        ensureSpace(42);
-        doc.addImage(q.imageUrl, 'PNG', leftMargin, currentY, 65, 36);
-        currentY += 39;
+        const imgH = 30;
+        const imgW = 55;
+        doc.setDrawColor(226, 232, 240);
+        doc.roundedRect(innerLeft, itemY, imgW, imgH, 1.2, 1.2, 'D');
+        doc.addImage(q.imageUrl, 'PNG', innerLeft + 0.5, itemY + 0.5, imgW - 1, imgH - 1);
+        itemY += imgH + 2.0;
       } catch (err) {
         console.warn('Could not add image to question paper PDF', err);
       }
     }
 
-    // Render Question Content (Prose and Code Blocks)
-    contentBlocks.forEach((block) => {
+    // D. Render Code Blocks and Trailing Prose Text
+    contentBlocks.forEach((block, bIdx) => {
+      if (bIdx === 0 && hasFirstText) return;
+
       if (block.type === 'code') {
         const rawLines = block.content.split('\n');
-        // Expand tabs to 4 spaces to ensure consistent column alignment
         const codeLines = rawLines.map(l => l.replace(/\t/g, '    '));
-        const codeLineHeight = 3.8;
-        const codePadding = 3;
-        const totalCodeHeight = codeLines.length * codeLineHeight + (codePadding * 2);
+        const headerH = 4.8;
+        const lineH = 3.4;
+        const bodyH = codeLines.length * lineH + 2.5;
+        const totalCodeBoxH = headerH + bodyH;
 
-        // If the code snippet can fit on a single page, ensure the whole block starts together
-        const maxSinglePageCodeHeight = pageHeight - bottomMargin - topMargin - 12;
-        if (totalCodeHeight <= maxSinglePageCodeHeight) {
-          ensureSpace(totalCodeHeight + 6);
-        } else {
-          ensureSpace(35);
-        }
+        // Outer Dark Container
+        doc.setFillColor(15, 23, 42); // slate-900
+        doc.setDrawColor(51, 65, 85); // slate-700
+        doc.roundedRect(innerLeft, itemY, innerWidth, totalCodeBoxH, 1.5, 1.5, 'FD');
 
-        // Background box for code snippet
-        doc.setFillColor(248, 250, 252);
-        doc.setDrawColor(203, 213, 225);
-        doc.roundedRect(leftMargin, currentY, contentWidth, totalCodeHeight, 1.5, 1.5, 'FD');
+        // Header Bar (Terminal Header)
+        doc.setFillColor(30, 41, 59); // slate-800
+        doc.roundedRect(innerLeft, itemY, innerWidth, headerH, 1.5, 1.5, 'F');
+        doc.rect(innerLeft, itemY + 2, innerWidth, headerH - 2, 'F');
+        doc.setDrawColor(51, 65, 85);
+        doc.line(innerLeft, itemY + headerH, innerLeft + innerWidth, itemY + headerH);
 
-        // Left accent bar
-        doc.setFillColor(0, 128, 55);
-        doc.rect(leftMargin, currentY, 1.5, totalCodeHeight, 'F');
+        // Terminal icon ">_ "
+        doc.setFont('courier', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(52, 211, 153); // emerald-400
+        doc.text('>_ ', innerLeft + 3, itemY + 3.4);
 
-        // Language tag if available
-        if (block.language && block.language.toLowerCase() !== 'code') {
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(7);
-          doc.setTextColor(100, 116, 139);
-          doc.text(block.language.toUpperCase(), pageWidth - rightMargin - 3, currentY + 4, { align: 'right' });
-        }
+        // Language
+        const langLabel = (block.language && block.language.toLowerCase() !== 'code') ? block.language : 'Python';
+        doc.setTextColor(203, 213, 225); // slate-300
+        doc.text(langLabel, innerLeft + 8.5, itemY + 3.4);
 
-        // Print code lines with monospace Courier font
-        doc.setFont('courier', 'normal');
-        doc.setFontSize(8.5);
-        doc.setTextColor(15, 23, 42);
-
-        let codeY = currentY + codePadding + 3;
-        codeLines.forEach((line) => {
-          if (codeY > pageHeight - bottomMargin) {
-            doc.addPage();
-            drawPageHeaderAndFooter(false);
-            codeY = topMargin + 4;
-            currentY = topMargin;
-          }
-          // Courier font guarantees that indentation (spaces) renders with exact column alignment
-          // Maximum printable characters before margin is ~92 chars
-          const maxChars = 92;
-          const displayLine = line.length > maxChars ? line.substring(0, maxChars - 3) + '...' : line;
-          doc.text(displayLine, leftMargin + 4, codeY);
-          codeY += codeLineHeight;
-        });
-
-        currentY += totalCodeHeight + 3;
-      } else {
-        // Prose text block
+        // Line count
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9.5);
-        doc.setTextColor(15, 23, 42);
+        doc.setFontSize(6.5);
+        doc.setTextColor(148, 163, 184); // slate-400
+        const lText = `(${codeLines.length} line${codeLines.length !== 1 ? 's' : ''})`;
+        const lX = innerLeft + 8.5 + doc.getTextWidth(langLabel) + 2;
+        doc.text(lText, lX, itemY + 3.3);
 
-        const lines = block.content.split('\n');
-        lines.forEach((line) => {
-          if (!line.trim()) {
-            currentY += 2;
-            return;
-          }
-          const wrapped = doc.splitTextToSize(line, contentWidth);
-          ensureSpace(wrapped.length * 4.2);
-          doc.text(wrapped, leftMargin, currentY);
-          currentY += wrapped.length * 4.2;
+        // Monospace code lines with line numbers
+        let cLineY = itemY + headerH + 2.8;
+        codeLines.forEach((cLine, lineIdx) => {
+          // Line number
+          doc.setFont('courier', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(100, 116, 139); // slate-500
+          doc.text(String(lineIdx + 1), innerLeft + 6.5, cLineY, { align: 'right' });
+
+          // Code text
+          doc.setFont('courier', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(241, 245, 249); // slate-100
+          const maxC = 88;
+          const disp = cLine.length > maxC ? cLine.substring(0, maxC - 3) + '...' : cLine;
+          doc.text(disp, innerLeft + 9, cLineY);
+
+          cLineY += lineH;
         });
-        currentY += 1.5;
-      }
-    });
 
-    currentY += 1;
-
-    // Options rendering
-    const optLabels = ['A', 'B', 'C', 'D'];
-    const activeOptions = (q.type === 'true-false' ? q.options.slice(0, 2) : q.options);
-
-    activeOptions.forEach((optText, optIdx) => {
-      const isCorrect = q.correctAnswer === optIdx;
-      const label = optLabels[optIdx];
-      const fallback = q.type === 'true-false' ? (optIdx === 0 ? 'True' : 'False') : `Option ${label}`;
-      const displayText = optText.trim() || fallback;
-
-      ensureSpace(7);
-
-      // Option background if correct and showAnswers
-      if (showAnswers && isCorrect) {
-        doc.setFillColor(236, 253, 245);
-        doc.setDrawColor(167, 243, 208);
-        doc.roundedRect(leftMargin + 2, currentY - 3.5, contentWidth - 4, 6.5, 1, 1, 'FD');
-      }
-
-      // Option Circle Badge
-      if (showAnswers && isCorrect) {
-        doc.setFillColor(0, 128, 55);
-        doc.circle(leftMargin + 5.5, currentY - 0.2, 2.5, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(255, 255, 255);
-        doc.text(label, leftMargin + 5.5, currentY + 0.6, { align: 'center' });
+        itemY += totalCodeBoxH + 2.0;
       } else {
-        doc.setFillColor(241, 245, 249);
-        doc.setDrawColor(203, 213, 225);
-        doc.circle(leftMargin + 5.5, currentY - 0.2, 2.5, 'FD');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(71, 85, 105);
-        doc.text(label, leftMargin + 5.5, currentY + 0.6, { align: 'center' });
+        // Trailing prose text
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(15, 23, 42);
+        const tLines = doc.splitTextToSize(block.content, innerWidth);
+        tLines.forEach((tl: string) => {
+          doc.text(tl, innerLeft, itemY + 3.5);
+          itemY += 4.0;
+        });
+        itemY += 1.0;
       }
-
-      // Option Text
-      doc.setFont('helvetica', showAnswers && isCorrect ? 'bold' : 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(showAnswers && isCorrect ? 0 : 30, showAnswers && isCorrect ? 128 : 41, showAnswers && isCorrect ? 55 : 59);
-
-      const wrappedOpt = doc.splitTextToSize(displayText, contentWidth - 28);
-      doc.text(wrappedOpt, leftMargin + 11, currentY);
-
-      if (showAnswers && isCorrect) {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(0, 128, 55);
-        doc.text('[Correct Answer]', pageWidth - rightMargin - 4, currentY, { align: 'right' });
-      }
-
-      currentY += Math.max(6, wrappedOpt.length * 4);
     });
 
-    currentY += 3;
+    // E. Render Badges Bar ([MCQ] [2 marks] [-0.00 neg])
+    const badgeH = 4.2;
+    let bX = innerLeft;
+    const renderPill = (txt: string) => {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      const tw = doc.getTextWidth(txt);
+      const bw = tw + 5;
 
-    // Divider between questions
-    doc.setDrawColor(241, 245, 249);
-    doc.line(leftMargin, currentY, pageWidth - rightMargin, currentY);
-    currentY += 4;
+      doc.setFillColor(241, 245, 249); // slate-100
+      doc.setDrawColor(226, 232, 240); // slate-200
+      doc.roundedRect(bX, itemY, bw, badgeH, 1, 1, 'FD');
+
+      doc.setTextColor(71, 85, 105); // slate-600
+      doc.text(txt, bX + bw / 2, itemY + 3.0, { align: 'center' });
+
+      bX += bw + 2;
+    };
+
+    renderPill(typeLabel);
+    renderPill(`${marks} mark${marks !== 1 ? 's' : ''}`);
+    renderPill(`-${negMarks > 0 ? negMarks.toFixed(2) : '0.00'} neg`);
+
+    itemY += badgeH + 2.5;
+
+    // F. Render Options in 2-Column Grid
+    const colXs = [innerLeft, innerLeft + colW + colGap];
+
+    const renderOptCard = (optIdx: number, oX: number, oY: number, oH: number) => {
+      const isCorrect = q.correctAnswer === optIdx;
+      const labelLetter = String.fromCharCode(65 + optIdx);
+      const rawOpt = optList[optIdx] ?? '';
+      const fallbackOpt = q.type === 'true-false' ? (optIdx === 0 ? 'True' : 'False') : `Option ${labelLetter}`;
+      const dispOpt = rawOpt.trim() || fallbackOpt;
+
+      if (showAnswers && isCorrect) {
+        // Emerald highlighted card
+        doc.setFillColor(240, 253, 244); // emerald-50
+        doc.setDrawColor(134, 239, 172); // emerald-300
+        doc.roundedRect(oX, oY, colW, oH, 1.2, 1.2, 'FD');
+
+        // "C." label
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(0, 128, 55);
+        doc.text(`${labelLetter}.`, oX + 2.8, oY + 3.8);
+
+        // Option Text
+        const optLines = doc.splitTextToSize(dispOpt, colW - 10);
+        doc.text(optLines, oX + 6.8, oY + 3.8);
+
+        // "(Correct)" tag
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7);
+        doc.setTextColor(0, 128, 55);
+        doc.text('(Correct)', oX + 6.8, oY + oH - 1.6);
+      } else {
+        // Standard option card
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(226, 232, 240); // slate-200
+        doc.roundedRect(oX, oY, colW, oH, 1.2, 1.2, 'FD');
+
+        // "A." label
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(71, 85, 105);
+        doc.text(`${labelLetter}.`, oX + 2.8, oY + 3.8);
+
+        // Option Text
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(30, 41, 59);
+        const optLines = doc.splitTextToSize(dispOpt, colW - 10);
+        doc.text(optLines, oX + 6.8, oY + 3.8);
+      }
+
+      // Option image if any
+      if (q.type === 'mcq-image' && q.optionImages?.[optIdx]) {
+        try {
+          doc.addImage(q.optionImages[optIdx], 'PNG', oX + 6.8, oY + oH - 18, 22, 15);
+        } catch (e) {
+          console.warn('Option image render error', e);
+        }
+      }
+    };
+
+    // Row 0: Options A and B
+    renderOptCard(0, colXs[0], itemY, row0H);
+    if (optList.length > 1) {
+      renderOptCard(1, colXs[1], itemY, row0H);
+    }
+    itemY += row0H + 2.0;
+
+    // Row 1: Options C and D
+    if (optList.length > 2) {
+      renderOptCard(2, colXs[0], itemY, row1H);
+      if (optList.length > 3) {
+        renderOptCard(3, colXs[1], itemY, row1H);
+      }
+      itemY += row1H + 2.0;
+    }
+
+    // Advance Y position for next question
+    currentY = cardTop + totalCardHeight + 3.5;
   });
 
   // =========================================================================
