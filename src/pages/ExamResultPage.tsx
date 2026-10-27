@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, XCircle, MinusCircle, Home, Trophy } from 'lucide-react';
 import Header from '@/components/Header';
-import { Exam, ExamResult } from '@/lib/types';
+import { Exam, type ExamResult } from '@/lib/types';
 
 const ExamResult = () => {
   const location = useLocation();

@@ -737,6 +737,7 @@ export async function exportExamDetailedPdfReport(
   const attemptedCandidates = candidateResults.filter((cr) => cr.isAttempted);
   const attemptedCount = attemptedCandidates.length;
   const notAttemptedCount = totalTargetCandidates - attemptedCount;
+  const turnoutRate = totalTargetCandidates > 0 ? (attemptedCount / totalTargetCandidates) * 100 : 0;
   const passCount = attemptedCandidates.filter((cr) => cr.isPass).length;
   const failCount = attemptedCount - passCount;
   const passRate = attemptedCount > 0 ? ((passCount / attemptedCount) * 100).toFixed(1) : '0';
@@ -869,7 +870,7 @@ export async function exportExamDetailedPdfReport(
     head: [['Metric Description', 'Count / Value', 'Cohort Share / Benchmark']],
     body: [
       ['Total Registered Candidates', `${totalTargetCandidates} Candidates`, '100% Target Population'],
-      ['Exam Submissions / Attempted', `${attemptedCount} Candidates`, `${totalTargetCandidates > 0 ? ((attemptedCount / totalTargetCandidates) * 100).toFixed(1) : 0}% Turnout Rate`],
+      ['Exam Submissions / Attempted', `${attemptedCount} Candidates`, `${turnoutRate.toFixed(1)}% Turnout Rate`],
       ['Unattempted / Absent', `${notAttemptedCount} Candidates`, `${totalTargetCandidates > 0 ? ((notAttemptedCount / totalTargetCandidates) * 100).toFixed(1) : 0}% Absentee Rate`],
       ['Qualified / Passed (>= 50%)', `${passCount} Candidates`, `${passRate}% of Attempted`],
       ['Did Not Qualify / Failed (< 50%)', `${failCount} Candidates`, `${failRate}% of Attempted`],
@@ -1254,7 +1255,7 @@ export async function exportExamDetailedPdfReport(
           if (data.column.index === 6) {
             data.cell.styles.halign = 'center';
             data.cell.styles.fontStyle = 'bold';
-            const corrVal = parseInt(data.cell.raw, 10);
+            const corrVal = parseInt(String(data.cell.raw ?? ''), 10);
             if (isAttempted && !isNaN(corrVal)) {
               if (corrVal > 0) {
                 data.cell.styles.fillColor = [220, 252, 231]; // Light green
@@ -1272,7 +1273,7 @@ export async function exportExamDetailedPdfReport(
           if (data.column.index === 7) {
             data.cell.styles.halign = 'center';
             data.cell.styles.fontStyle = 'bold';
-            const wrongVal = parseInt(data.cell.raw, 10);
+            const wrongVal = parseInt(String(data.cell.raw ?? ''), 10);
             if (isAttempted && !isNaN(wrongVal)) {
               if (wrongVal > 0) {
                 data.cell.styles.fillColor = [254, 226, 226]; // Light red
@@ -1298,7 +1299,7 @@ export async function exportExamDetailedPdfReport(
             data.cell.styles.halign = 'center';
             data.cell.styles.fontStyle = 'bold';
             if (isAttempted) {
-              const pctVal = parseFloat(data.cell.raw);
+              const pctVal = parseFloat(String(data.cell.raw ?? ''));
               if (!isNaN(pctVal)) {
                 if (pctVal >= 75) {
                   data.cell.styles.fillColor = [220, 252, 231]; // Excel Green heat cell
@@ -1376,7 +1377,7 @@ export async function exportExamDetailedPdfReport(
           if (data.column.index === tabsColIdx) {
             data.cell.styles.halign = 'center';
             data.cell.styles.fontStyle = 'bold';
-            const tabVal = parseInt(data.cell.raw, 10);
+            const tabVal = parseInt(String(data.cell.raw ?? ''), 10);
             if (isAttempted && !isNaN(tabVal)) {
               if (tabVal >= 3 || status === 'Limit Exceeded') {
                 data.cell.styles.fillColor = [254, 226, 226]; // Red violation
@@ -1653,7 +1654,7 @@ export async function exportExamDetailedPdfReport(
     const otherCandidates = compData.candidates || [];
     const otherResults = compData.results || [];
     const otherAttempts = compData.attempts || [];
-    const otherTotalAttempts = otherAttempts.filter((a) => a.isSubmitted).length;
+    const otherTotalAttempts = otherAttempts.filter((a) => a.isSubmitted || (a.answers && a.answers.length > 0)).length;
     const otherPassCount = otherResults.filter((r) => r.percentage >= 50).length;
     const otherPassRate = otherTotalAttempts > 0 ? Math.round((otherPassCount / otherTotalAttempts) * 100) : 0;
     const otherAvgScore = otherResults.length > 0 ? Math.round(otherResults.reduce((s, r) => s + r.percentage, 0) / otherResults.length) : 0;
@@ -1661,14 +1662,14 @@ export async function exportExamDetailedPdfReport(
     const myIntegrityRate = attemptedCount > 0 ? Math.round((attemptedCandidates.filter((c) => safeNum(c.tabSwitches) === 0).length / attemptedCount) * 100) : 0;
 
     const compChartImg = createAtomComparativeChart(
+      exam.name,
+      compData.exam.name,
       [
         { label: 'Turnout Rate', val1: Math.round(turnoutRate), val2: otherCandidates.length > 0 ? Math.round((otherTotalAttempts / otherCandidates.length) * 100) : 0 },
-        { label: 'Pass Rate', val1: Math.round(passRate), val2: otherPassRate },
-        { label: 'Avg Score', val1: Math.round(avgPercentage), val2: otherAvgScore },
+        { label: 'Pass Rate', val1: Math.round(Number(passRate)), val2: otherPassRate },
+        { label: 'Avg Score', val1: Math.round(Number(avgPercentage)), val2: otherAvgScore },
         { label: 'Integrity Rate', val1: myIntegrityRate, val2: otherIntegrityRate },
-      ],
-      exam.name,
-      compData.exam.name
+      ]
     );
 
     if (compChartImg) {
@@ -1682,8 +1683,8 @@ export async function exportExamDetailedPdfReport(
       body: [
         ['Registered Candidates', `${totalTargetCandidates}`, `${otherCandidates.length}`, `${totalTargetCandidates - otherCandidates.length}`],
         ['Attempted / Submissions', `${attemptedCount} (${Math.round(turnoutRate)}%)`, `${otherTotalAttempts}`, `${attemptedCount - otherTotalAttempts}`],
-        ['Pass Rate', `${Math.round(passRate)}%`, `${otherPassRate}%`, `${Math.round(passRate) - otherPassRate}%`],
-        ['Average Score', `${Math.round(avgPercentage)}%`, `${otherAvgScore}%`, `${Math.round(avgPercentage) - otherAvgScore}%`],
+        ['Pass Rate', `${Math.round(Number(passRate))}%`, `${otherPassRate}%`, `${Math.round(Number(passRate)) - otherPassRate}%`],
+        ['Average Score', `${Math.round(Number(avgPercentage))}%`, `${otherAvgScore}%`, `${Math.round(Number(avgPercentage)) - otherAvgScore}%`],
         ['Clean Integrity (0 tabs)', `${myIntegrityRate}%`, `${otherIntegrityRate}%`, `${myIntegrityRate - otherIntegrityRate}%`],
       ],
       theme: 'grid',
