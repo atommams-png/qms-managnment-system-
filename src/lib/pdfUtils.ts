@@ -79,7 +79,17 @@ function draw3DBarOnCanvas(
   depth: number,
   colorHex: string
 ) {
-  if (height <= 0 || width <= 0) return;
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    !Number.isFinite(depth) ||
+    height <= 0 ||
+    width <= 0
+  ) {
+    return;
+  }
 
   // 1. Drop shadow
   ctx.save();
@@ -605,14 +615,17 @@ function createAtomComparativeChart(
   metrics.forEach((m, i) => {
     const groupX = chartStartX + groupSpacing + i * (barW * 2 + 20 + groupSpacing);
 
+    const val1 = Math.round(safeNum(m.val1, 0));
+    const val2 = Math.round(safeNum(m.val2, 0));
+
     // Bar 1 (Exam 1 - Emerald Green)
-    const h1 = Math.max(10, (Math.min(100, m.val1) / 100) * maxHeight);
+    const h1 = Math.max(10, (Math.min(100, Math.max(0, val1)) / 100) * maxHeight);
     const b1x = groupX;
     const b1y = floorY - h1;
     draw3DBarOnCanvas(ctx, b1x, b1y, barW, h1, depth, '#008037');
 
     // Bar 2 (Exam 2 - Royal Blue)
-    const h2 = Math.max(10, (Math.min(100, m.val2) / 100) * maxHeight);
+    const h2 = Math.max(10, (Math.min(100, Math.max(0, val2)) / 100) * maxHeight);
     const b2x = groupX + barW + 15;
     const b2y = floorY - h2;
     draw3DBarOnCanvas(ctx, b2x, b2y, barW, h2, depth, '#2563eb');
@@ -621,10 +634,10 @@ function createAtomComparativeChart(
     ctx.fillStyle = '#008037';
     ctx.font = 'bold 20px Century Gothic';
     ctx.textAlign = 'center';
-    ctx.fillText(`${m.val1}%`, b1x + barW / 2 + depth / 2, b1y - depth - 8);
+    ctx.fillText(`${val1}%`, b1x + barW / 2 + depth / 2, b1y - depth - 8);
 
     ctx.fillStyle = '#2563eb';
-    ctx.fillText(`${m.val2}%`, b2x + barW / 2 + depth / 2, b2y - depth - 8);
+    ctx.fillText(`${val2}%`, b2x + barW / 2 + depth / 2, b2y - depth - 8);
 
     // Metric Label below floor
     ctx.fillStyle = '#1e293b';
@@ -1655,19 +1668,30 @@ export async function exportExamDetailedPdfReport(
     const otherResults = compData.results || [];
     const otherAttempts = compData.attempts || [];
     const otherTotalAttempts = otherAttempts.filter((a) => a.isSubmitted || (a.answers && a.answers.length > 0)).length;
-    const otherPassCount = otherResults.filter((r) => r.percentage >= 50).length;
+    const otherPassCount = otherResults.filter((r) => safeNum(r.percentage) >= 50).length;
     const otherPassRate = otherTotalAttempts > 0 ? Math.round((otherPassCount / otherTotalAttempts) * 100) : 0;
-    const otherAvgScore = otherResults.length > 0 ? Math.round(otherResults.reduce((s, r) => s + r.percentage, 0) / otherResults.length) : 0;
-    const otherIntegrityRate = otherTotalAttempts > 0 ? Math.round((otherAttempts.filter((a) => (a.tabSwitches || 0) === 0).length / otherTotalAttempts) * 100) : 0;
-    const myIntegrityRate = attemptedCount > 0 ? Math.round((attemptedCandidates.filter((c) => safeNum(c.tabSwitches) === 0).length / attemptedCount) * 100) : 0;
+    const otherAvgScore = otherResults.length > 0
+      ? Math.round(otherResults.reduce((s, r) => s + safeNum(r.percentage), 0) / otherResults.length)
+      : 0;
+    const otherIntegrityRate = otherTotalAttempts > 0
+      ? Math.round((otherAttempts.filter((a) => safeNum(a.tabSwitches, 0) === 0).length / otherTotalAttempts) * 100)
+      : 0;
+    const myIntegrityRate = attemptedCount > 0
+      ? Math.round((attemptedCandidates.filter((c) => safeNum(c.tabSwitches, 0) === 0).length / attemptedCount) * 100)
+      : 0;
+
+    const myTurnout = Math.round(safeNum(turnoutRate));
+    const otherTurnout = otherCandidates.length > 0 ? Math.round((otherTotalAttempts / otherCandidates.length) * 100) : 0;
+    const myPassRate = Math.round(safeNum(passRate));
+    const myAvgScore = Math.round(safeNum(avgPercentage));
 
     const compChartImg = createAtomComparativeChart(
       exam.name,
       compData.exam.name,
       [
-        { label: 'Turnout Rate', val1: Math.round(turnoutRate), val2: otherCandidates.length > 0 ? Math.round((otherTotalAttempts / otherCandidates.length) * 100) : 0 },
-        { label: 'Pass Rate', val1: Math.round(Number(passRate)), val2: otherPassRate },
-        { label: 'Avg Score', val1: Math.round(Number(avgPercentage)), val2: otherAvgScore },
+        { label: 'Turnout Rate', val1: myTurnout, val2: otherTurnout },
+        { label: 'Pass Rate', val1: myPassRate, val2: otherPassRate },
+        { label: 'Avg Score', val1: myAvgScore, val2: otherAvgScore },
         { label: 'Integrity Rate', val1: myIntegrityRate, val2: otherIntegrityRate },
       ]
     );
@@ -1682,9 +1706,9 @@ export async function exportExamDetailedPdfReport(
       head: [['Benchmark Metric', `${exam.name} (${exam.code})`, `${compData.exam.name} (${compData.exam.code})`, 'Delta / Variance']],
       body: [
         ['Registered Candidates', `${totalTargetCandidates}`, `${otherCandidates.length}`, `${totalTargetCandidates - otherCandidates.length}`],
-        ['Attempted / Submissions', `${attemptedCount} (${Math.round(turnoutRate)}%)`, `${otherTotalAttempts}`, `${attemptedCount - otherTotalAttempts}`],
-        ['Pass Rate', `${Math.round(Number(passRate))}%`, `${otherPassRate}%`, `${Math.round(Number(passRate)) - otherPassRate}%`],
-        ['Average Score', `${Math.round(Number(avgPercentage))}%`, `${otherAvgScore}%`, `${Math.round(Number(avgPercentage)) - otherAvgScore}%`],
+        ['Attempted / Submissions', `${attemptedCount} (${myTurnout}%)`, `${otherTotalAttempts} (${otherTurnout}%)`, `${attemptedCount - otherTotalAttempts}`],
+        ['Pass Rate', `${myPassRate}%`, `${otherPassRate}%`, `${myPassRate - otherPassRate}%`],
+        ['Average Score', `${myAvgScore}%`, `${otherAvgScore}%`, `${myAvgScore - otherAvgScore}%`],
         ['Clean Integrity (0 tabs)', `${myIntegrityRate}%`, `${otherIntegrityRate}%`, `${myIntegrityRate - otherIntegrityRate}%`],
       ],
       theme: 'grid',
