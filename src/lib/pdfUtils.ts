@@ -760,6 +760,245 @@ export interface PdfExportOptions {
 }
 
 
+
+// =========================================================================
+// SECTION 5 SCORECARD DRAWING HELPERS
+// =========================================================================
+function drawTrophyIcon(doc: any, cx: number, cy: number, s: number = 3.2) {
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(cx - s * 0.7, cy - s * 0.65, s * 1.4, s * 0.22, s * 0.08, s * 0.08, 'F');
+  doc.triangle(cx - s * 0.65, cy - s * 0.45, cx + s * 0.65, cy - s * 0.45, cx, cy + s * 0.2, 'F');
+  doc.rect(cx - s * 0.12, cy + s * 0.15, s * 0.24, s * 0.35, 'F');
+  doc.roundedRect(cx - s * 0.55, cy + s * 0.45, s * 1.1, s * 0.25, s * 0.08, s * 0.08, 'F');
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(0.35);
+  doc.line(cx - s * 0.6, cy - s * 0.4, cx - s * 0.9, cy - s * 0.25);
+  doc.line(cx - s * 0.9, cy - s * 0.25, cx - s * 0.75, cy);
+  doc.line(cx - s * 0.75, cy, cx - s * 0.35, cy + s * 0.1);
+  doc.line(cx + s * 0.6, cy - s * 0.4, cx + s * 0.9, cy - s * 0.25);
+  doc.line(cx + s * 0.9, cy - s * 0.25, cx + s * 0.75, cy);
+  doc.line(cx + s * 0.75, cy, cx + s * 0.35, cy + s * 0.1);
+}
+
+function drawRankMedal(doc: any, cx: number, cy: number, rankNum: number | null) {
+  if (rankNum === null) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('-', cx, cy + 0.8, { align: 'center' });
+    return;
+  }
+
+  if (rankNum === 1) {
+    doc.setFillColor(245, 158, 11);
+    doc.triangle(cx - 1.2, cy + 2.0, cx - 3.2, cy + 5.5, cx - 1.6, cy + 4.6, 'F');
+    doc.triangle(cx - 1.2, cy + 2.0, cx - 1.6, cy + 4.6, cx - 0.4, cy + 2.5, 'F');
+    doc.triangle(cx + 0.4, cy + 2.5, cx + 1.6, cy + 4.6, cx + 1.2, cy + 2.0, 'F');
+    doc.triangle(cx + 1.2, cy + 2.0, cx + 1.6, cy + 4.6, cx + 3.2, cy + 5.5, 'F');
+    doc.setFillColor(251, 191, 36);
+    doc.circle(cx, cy, 3.4, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(15, 23, 42);
+    doc.text('1', cx, cy + 0.9, { align: 'center' });
+  } else if (rankNum === 2) {
+    doc.setFillColor(148, 163, 184);
+    doc.triangle(cx - 1.2, cy + 2.0, cx - 3.2, cy + 5.5, cx - 1.6, cy + 4.6, 'F');
+    doc.triangle(cx - 1.2, cy + 2.0, cx - 1.6, cy + 4.6, cx - 0.4, cy + 2.5, 'F');
+    doc.triangle(cx + 0.4, cy + 2.5, cx + 1.6, cy + 4.6, cx + 1.2, cy + 2.0, 'F');
+    doc.triangle(cx + 1.2, cy + 2.0, cx + 1.6, cy + 4.6, cx + 3.2, cy + 5.5, 'F');
+    doc.setFillColor(203, 213, 225);
+    doc.circle(cx, cy, 3.4, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(15, 23, 42);
+    doc.text('2', cx, cy + 0.9, { align: 'center' });
+  } else if (rankNum === 3) {
+    doc.setFillColor(194, 65, 12);
+    doc.triangle(cx - 1.2, cy + 2.0, cx - 3.2, cy + 5.5, cx - 1.6, cy + 4.6, 'F');
+    doc.triangle(cx - 1.2, cy + 2.0, cx - 1.6, cy + 4.6, cx - 0.4, cy + 2.5, 'F');
+    doc.triangle(cx + 0.4, cy + 2.5, cx + 1.6, cy + 4.6, cx + 1.2, cy + 2.0, 'F');
+    doc.triangle(cx + 1.2, cy + 2.0, cx + 1.6, cy + 4.6, cx + 3.2, cy + 5.5, 'F');
+    doc.setFillColor(234, 88, 12);
+    doc.circle(cx, cy, 3.4, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(15, 23, 42);
+    doc.text('3', cx, cy + 0.9, { align: 'center' });
+  } else {
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.35);
+    doc.circle(cx, cy, 3.4, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text(String(rankNum), cx, cy + 0.9, { align: 'center' });
+  }
+}
+
+function drawScoreBar(
+  doc: any,
+  cellX: number,
+  cellY: number,
+  cellW: number,
+  cellH: number,
+  scoreText: string,
+  obtainedMarks: number,
+  totalMarks: number
+) {
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(15, 23, 42);
+  doc.text(scoreText, cellX + cellW / 2, cellY + cellH / 2 - 1.8, { align: 'center' });
+
+  const barW = Math.min(cellW - 3, 14);
+  const barH = 2.4;
+  const barX = cellX + (cellW - barW) / 2;
+  const barY = cellY + cellH / 2 + 1.0;
+  const r = 1.2;
+
+  doc.setFillColor(226, 232, 240);
+  doc.roundedRect(barX, barY, barW, barH, r, r, 'F');
+
+  const pct = totalMarks > 0 ? Math.min(1, Math.max(0, obtainedMarks / totalMarks)) : 0;
+  if (pct > 0) {
+    const fillW = Math.max(r * 2, barW * pct);
+    if (pct >= 0.4) {
+      doc.setFillColor(22, 163, 74);
+    } else {
+      doc.setFillColor(239, 68, 68);
+    }
+    doc.roundedRect(barX, barY, fillW, barH, r, r, 'F');
+  }
+}
+
+function drawAccuracyDonut(doc: any, cx: number, cy: number, pct: number) {
+  const r = 4.2;
+  const strokeW = 1.1;
+
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(strokeW);
+  doc.circle(cx, cy, r, 'S');
+
+  if (pct > 0) {
+    let arcColor = [22, 163, 74];
+    if (pct < 50) {
+      arcColor = [239, 68, 68];
+    } else if (pct < 75) {
+      arcColor = [245, 158, 11];
+    }
+    doc.setDrawColor(arcColor[0], arcColor[1], arcColor[2]);
+    doc.setLineWidth(strokeW);
+    doc.setLineCap('round');
+
+    const startAngle = -Math.PI / 2;
+    const sweep = (Math.min(100, Math.max(0, pct)) / 100) * 2 * Math.PI;
+    const endAngle = startAngle + sweep;
+    const steps = Math.max(6, Math.round((sweep / (2 * Math.PI)) * 36));
+
+    for (let i = 0; i < steps; i++) {
+      const a1 = startAngle + (i / steps) * (endAngle - startAngle);
+      const a2 = startAngle + ((i + 1) / steps) * (endAngle - startAngle);
+      doc.line(
+        cx + r * Math.cos(a1), cy + r * Math.sin(a1),
+        cx + r * Math.cos(a2), cy + r * Math.sin(a2)
+      );
+    }
+  }
+
+  doc.setFont('helvetica', 'bold');
+  const txt = String(Number.isInteger(pct) ? pct : pct.toFixed(1)) + '%';
+  doc.setFontSize(txt.length > 4 ? 5.2 : 6.2);
+  doc.setTextColor(15, 23, 42);
+  doc.text(txt, cx, cy + 0.8, { align: 'center' });
+}
+
+function drawSectionCard(
+  doc: any,
+  cellX: number,
+  cellY: number,
+  cellW: number,
+  cellH: number,
+  text: string,
+  type: 'strong' | 'avg' | 'weak'
+) {
+  if (!text || text === '-') {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('-', cellX + cellW / 2, cellY + cellH / 2 + 1, { align: 'center' });
+    return;
+  }
+
+  const cardX = cellX + 1.2;
+  const cardY = cellY + 1.2;
+  const cardW = cellW - 2.4;
+  const cardH = cellH - 2.4;
+
+  if (type === 'strong') {
+    doc.setFillColor(220, 252, 231);
+    doc.setTextColor(21, 128, 61);
+  } else if (type === 'avg') {
+    doc.setFillColor(254, 249, 195);
+    doc.setTextColor(133, 77, 14);
+  } else {
+    doc.setFillColor(254, 226, 226);
+    doc.setTextColor(153, 27, 27);
+  }
+
+  doc.roundedRect(cardX, cardY, cardW, cardH, 1.5, 1.5, 'F');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6);
+
+  const lines = doc.splitTextToSize(text, cardW - 2);
+  const lineH = 2.6;
+  const totalH = lines.length * lineH;
+  let startY = cardY + (cardH - totalH) / 2 + 2.0;
+  for (const l of lines) {
+    doc.text(l, cardX + cardW / 2, startY, { align: 'center' });
+    startY += lineH;
+  }
+}
+
+function drawResultPill(
+  doc: any,
+  cellX: number,
+  cellY: number,
+  cellW: number,
+  cellH: number,
+  status: string
+) {
+  const pillW = Math.min(cellW - 2, 13);
+  const pillH = 6;
+  const pillX = cellX + (cellW - pillW) / 2;
+  const pillY = cellY + (cellH - pillH) / 2;
+  const r = pillH / 2;
+
+  if (status === 'PASSED') {
+    doc.setFillColor(220, 252, 231);
+    doc.roundedRect(pillX, pillY, pillW, pillH, r, r, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(21, 128, 61);
+    doc.text('PASSED', cellX + cellW / 2, cellY + cellH / 2 + 0.9, { align: 'center' });
+  } else if (status === 'FAILED') {
+    doc.setFillColor(254, 226, 226);
+    doc.roundedRect(pillX, pillY, pillW, pillH, r, r, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(185, 28, 28);
+    doc.text('FAILED', cellX + cellW / 2, cellY + cellH / 2 + 0.9, { align: 'center' });
+  } else {
+    doc.setFillColor(241, 245, 249);
+    doc.roundedRect(pillX, pillY, pillW, pillH, r, r, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text('ABSENT', cellX + cellW / 2, cellY + cellH / 2 + 0.9, { align: 'center' });
+  }
+}
+
 export async function exportExamDetailedPdfReport(
   exam: Exam,
   candidates: Candidate[],
@@ -906,7 +1145,7 @@ export async function exportExamDetailedPdfReport(
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
-    doc.text('EXAMINATION INTELLIGENCE REPORT', pageWidth - 14, 12, { align: 'right' });
+    doc.text('ASSESSMENT PERFORMANCE REPORT', pageWidth - 14, 12, { align: 'right' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
     doc.setTextColor(220, 252, 231);
@@ -932,11 +1171,11 @@ export async function exportExamDetailedPdfReport(
   currentY += 8;
 
   // =========================================================================
-  // SECTION 1: EXAMINATION SPECIFICATIONS & POLICY
+  // SECTION 1: ASSESSMENT PARAMETERS & POLICY
   // =========================================================================
   autoTable(doc, {
     startY: currentY,
-    head: [['EXAMINATION SPECIFICATIONS & CONFIGURATION', 'VALUE / POLICY']],
+    head: [['Assessment Parameters', 'Assessment Summary']],
     body: [
       ['Examination Name', exam.name],
       ['Access Code', exam.code],
@@ -975,7 +1214,7 @@ export async function exportExamDetailedPdfReport(
 
   autoTable(doc, {
     startY: currentY,
-    head: [['Metric Description', 'Count / Value', 'Cohort Share / Benchmark']],
+    head: [['Performance Indicator', 'Result Summary', 'Percentage']],
     body: [
       ['Total Registered Candidates', `${totalTargetCandidates} Candidates`, '100% Target Population'],
       ['Exam Submissions / Attempted', `${attemptedCount} Candidates`, `${turnoutRate.toFixed(1)}% Turnout Rate`],
@@ -985,7 +1224,7 @@ export async function exportExamDetailedPdfReport(
       ['Class Average Score', `${avgScore} / ${examTotalMarks} Marks`, `${avgPercentage}% Average Accuracy`],
       ['Highest Score Achieved', `${formatMarks(highestScore)} / ${examTotalMarks} Marks`, `${examTotalMarks > 0 ? formatPct((highestScore / examTotalMarks) * 100) : '0%'} Score`],
       ['Lowest Score Achieved', `${formatMarks(lowestScore)} / ${examTotalMarks} Marks`, `${examTotalMarks > 0 ? formatPct((lowestScore / examTotalMarks) * 100) : '0%'} Score`],
-      ['Integrity Flagged (Limit Exceeded)', `${flaggedCount} Candidates`, flaggedCount > 0 ? 'Review flagged attempts' : 'Zero severe violations'],
+      ['Violations (Limit Exceeded)', `${flaggedCount} Candidates`, flaggedCount > 0 ? 'Review flagged attempts' : 'Zero severe violations'],
     ],
     theme: 'striped',
     headStyles: {
@@ -1011,7 +1250,7 @@ export async function exportExamDetailedPdfReport(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);
   doc.setTextColor(0, 128, 55);
-  doc.text('SCORE & PERFORMANCE BRACKET DISTRIBUTION', 14, currentY);
+  doc.text('SCORE DISTRIBUTION & GRADE ANALYSIS', 14, currentY);
   currentY += 3;
 
   const brackets = [
@@ -1030,7 +1269,7 @@ export async function exportExamDetailedPdfReport(
 
   autoTable(doc, {
     startY: currentY,
-    head: [['Percentage Bracket', 'Performance Tier', 'Candidate Count', 'Percentage Share']],
+    head: [['Percentage Bracket', 'Grade Category', 'Candidate Count', 'Percentage Share']],
     body: bracketRows,
     theme: 'grid',
     headStyles: {
@@ -1110,7 +1349,7 @@ export async function exportExamDetailedPdfReport(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);
   doc.setTextColor(0, 128, 55);
-  doc.text('SECTION-WISE ACCURACY & MASTERY BREAKDOWN', 14, currentY);
+  doc.text('SECTION-WISE PERFORMANCE ANALYSIS', 14, currentY);
   currentY += 3;
 
   autoTable(doc, {
@@ -1140,16 +1379,26 @@ export async function exportExamDetailedPdfReport(
   if (includeResults) {
     // SECTION 5: COMPLETE CANDIDATE EXAMINATION RESULTS & SCORECARD (NO CUTOFF)
     // =========================================================================
-    if (currentY + 35 > pageHeight - 18) {
+    if (currentY + 40 > pageHeight - 18) {
       doc.addPage();
       currentY = 20;
     }
 
+    // Top Green Banner matching reference design
+    const bannerH = 9.5;
+    doc.setFillColor(0, 128, 55);
+    doc.roundedRect(10, currentY, 190, bannerH, 2.5, 2.5, 'F');
+
+    // Trophy Icon on left of banner
+    drawTrophyIcon(doc, 16.5, currentY + 4.75, 3.2);
+
+    // Banner Title
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(0, 128, 55);
-    doc.text('CANDIDATE MERIT RANK LIST & DETAILED SCORECARD', 10, currentY);
-    currentY += 4.5;
+    doc.setFontSize(11);
+    doc.setTextColor(255, 255, 255);
+    doc.text('CANDIDATE MERIT RANK LIST & DETAILED SCORECARD', 23, currentY + 6.3);
+
+    currentY += bannerH + 3.5;
 
     const distinctQuestionSections = Array.from(
       new Set(
@@ -1159,25 +1408,19 @@ export async function exportExamDetailedPdfReport(
       )
     );
     const hasQuestionSections = distinctQuestionSections.length > 0;
+    const resultColIdx = hasQuestionSections ? 9 : 6;
 
-    const strongSecColIdx = hasQuestionSections ? 10 : -1;
-    const avgSecColIdx = hasQuestionSections ? 11 : -1;
-    const weakSecColIdx = hasQuestionSections ? 12 : -1;
-    const resultColIdx = hasQuestionSections ? 13 : 10;
-    const tabsColIdx = hasQuestionSections ? 14 : 11;
-
+    // Build candidate row data and metadata
+    const candidateMetaList: any[] = [];
     const candidateRankRows = candidateResults.map((cr, idx) => {
-      const rank = cr.isAttempted ? `#${idx + 1}` : '-';
+      const rankNum = cr.isAttempted ? idx + 1 : null;
       const resultStatus = !cr.isAttempted ? 'ABSENT' : cr.isPass ? 'PASSED' : 'FAILED';
-      const deptSec = cr.candidate.department
-        ? (cr.candidate.section ? `${cr.candidate.department} (${cr.candidate.section})` : cr.candidate.department)
-        : (cr.candidate.section || 'General');
+      const dept = cr.candidate.department || 'General';
+      const sec = cr.candidate.section ? `(${cr.candidate.section})` : '';
+      const deptDisplay = sec ? `${dept}\n${sec}` : dept;
 
       const scoreDisplay = cr.isAttempted
         ? `${formatMarks(cr.obtainedMarks)} / ${examTotalMarks}`
-        : '-';
-      const pctDisplay = cr.isAttempted
-        ? formatPct(cr.percentage)
         : '-';
 
       let strongSection = '-';
@@ -1210,7 +1453,6 @@ export async function exportExamDetailedPdfReport(
         });
 
         if (secScores.length > 0) {
-          // Sort descending: highest accuracy first, then obtained marks
           secScores.sort((a, b) => b.accuracy - a.accuracy || b.obtained - a.obtained);
 
           const maxAcc = secScores[0].accuracy;
@@ -1230,16 +1472,14 @@ export async function exportExamDetailedPdfReport(
               if (n.toLowerCase() === 'reading comprehension') return 'Reading';
               return n;
             });
-            return `${shortNames.join(', ')} (${acc}%)`;
+            return `${shortNames.join(', ')}\n(${acc}%)`;
           };
 
-          // 1. Strong Section(s): All sections tied with maxAcc (if maxAcc > 0)
           if (maxAcc > 0) {
             const topSections = secScores.filter((s) => s.accuracy === maxAcc);
             strongSection = formatSecList(topSections);
           }
 
-          // 2. Weak Section(s): Sections tied with minAcc (if minAcc < maxAcc, or if all are 0%)
           if (minAcc < maxAcc) {
             const bottomSections = secScores.filter((s) => s.accuracy === minAcc);
             weakSection = formatSecList(bottomSections);
@@ -1247,7 +1487,6 @@ export async function exportExamDetailedPdfReport(
             weakSection = formatSecList(secScores);
           }
 
-          // 3. Average Section(s): Only sections strictly between minAcc and maxAcc (and strictly > 0% and < 100%)
           if (secScores.length >= 3 && minAcc < maxAcc) {
             const midSections = secScores.filter((s) => s.accuracy < maxAcc && s.accuracy > minAcc && s.accuracy > 0);
             if (midSections.length > 0) {
@@ -1257,254 +1496,168 @@ export async function exportExamDetailedPdfReport(
         }
       }
 
-      const row = [
-        rank,
-        cr.candidate.name,
-        cr.candidate.email,
-        cr.candidate.usn || '-',
-        deptSec,
-        cr.submissionStatus,
-        cr.isAttempted ? `${cr.correct}` : '-',
-        cr.isAttempted ? `${cr.wrong}` : '-',
+      candidateMetaList.push({
+        rankNum,
+        isAttempted: cr.isAttempted,
+        obtainedMarks: cr.obtainedMarks,
+        totalMarks: examTotalMarks,
         scoreDisplay,
-        pctDisplay,
-      ];
+        percentage: cr.percentage,
+        resultStatus,
+        strongSection,
+        avgSection,
+        weakSection,
+      });
 
       if (hasQuestionSections) {
-        row.push(strongSection);
-        row.push(avgSection);
-        row.push(weakSection);
+        return [
+          '',
+          cr.candidate.name || 'Candidate',
+          cr.candidate.usn || '-',
+          deptDisplay,
+          '',
+          '',
+          strongSection,
+          avgSection,
+          weakSection,
+          '',
+        ];
+      } else {
+        return [
+          '',
+          cr.candidate.name || 'Candidate',
+          cr.candidate.usn || '-',
+          deptDisplay,
+          '',
+          '',
+          '',
+        ];
       }
-
-      row.push(resultStatus);
-      row.push(cr.isAttempted ? `${cr.tabSwitches}` : '-');
-
-      return row;
     });
 
     const tableHeaders = [
-      'Rank', 'Candidate Name', 'Email Address', 'USN', 'Dept', 'Status', 'Corr', 'Wrong', 'Score', 'Accuracy'
+      'Rank', 'Candidate Name', 'USN', 'Department', `Score\n( / ${examTotalMarks} )`, 'Percentage'
     ];
     if (hasQuestionSections) {
-      tableHeaders.push('Strong Sec', 'Avg Sec', 'Weak Sec');
+      tableHeaders.push('Strong Sections', 'Average Sections', 'Weak Sections');
     }
-    tableHeaders.push('Result', 'Tabs');
+    tableHeaders.push('Result');
 
     const colStyles = hasQuestionSections
       ? {
-          0: { cellWidth: 7, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 6.5 },
-          1: { cellWidth: 'auto', fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 6.5 },
-          2: { cellWidth: 'auto', textColor: [71, 85, 105], fontSize: 6 },
-          3: { cellWidth: 11, textColor: [71, 85, 105], fontSize: 6 },
-          4: { cellWidth: 11, textColor: [71, 85, 105], fontSize: 6 },
-          5: { cellWidth: 14, fontStyle: 'bold', halign: 'center', fontSize: 6 },
-          6: { cellWidth: 8, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
-          7: { cellWidth: 8, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
-          8: { cellWidth: 12, fontStyle: 'bold', textColor: [30, 41, 59], halign: 'center', fontSize: 6.5 },
-          9: { cellWidth: 11, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
-          10: { cellWidth: 16, fontStyle: 'bold', halign: 'center', fontSize: 6 },
-          11: { cellWidth: 16, fontStyle: 'bold', halign: 'center', fontSize: 6 },
-          12: { cellWidth: 16, fontStyle: 'bold', halign: 'center', fontSize: 6 },
-          13: { cellWidth: 13, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
-          14: { cellWidth: 8, fontStyle: 'bold', halign: 'center', fontSize: 6.5 },
+          0: { cellWidth: 13, halign: 'center' },
+          1: { cellWidth: 22, fontStyle: 'bold', textColor: [15, 23, 42], fontSize: 8 },
+          2: { cellWidth: 17, halign: 'center', textColor: [51, 65, 85], fontSize: 7.5 },
+          3: { cellWidth: 16, halign: 'center', textColor: [51, 65, 85], fontSize: 7 },
+          4: { cellWidth: 18, halign: 'center' },
+          5: { cellWidth: 18, halign: 'center' },
+          6: { cellWidth: 25, halign: 'center' },
+          7: { cellWidth: 23, halign: 'center' },
+          8: { cellWidth: 23, halign: 'center' },
+          9: { cellWidth: 15, halign: 'center' },
         }
       : {
-          0: { cellWidth: 8, fontStyle: 'bold', textColor: [0, 128, 55], halign: 'center', fontSize: 7.5 },
-          1: { cellWidth: 'auto', fontStyle: 'bold', textColor: [30, 41, 59], fontSize: 7.5 },
-          2: { cellWidth: 'auto', textColor: [71, 85, 105], fontSize: 7 },
-          3: { cellWidth: 14, textColor: [71, 85, 105], fontSize: 7 },
-          4: { cellWidth: 14, textColor: [71, 85, 105], fontSize: 7 },
-          5: { cellWidth: 18, fontStyle: 'bold', halign: 'center', fontSize: 7 },
-          6: { cellWidth: 10, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
-          7: { cellWidth: 10, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
-          8: { cellWidth: 16, fontStyle: 'bold', textColor: [30, 41, 59], halign: 'center', fontSize: 7.5 },
-          9: { cellWidth: 14, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
-          10: { cellWidth: 17, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
-          11: { cellWidth: 11, fontStyle: 'bold', halign: 'center', fontSize: 7.5 },
+          0: { cellWidth: 16, halign: 'center' },
+          1: { cellWidth: 40, fontStyle: 'bold', textColor: [15, 23, 42], fontSize: 8.5 },
+          2: { cellWidth: 28, halign: 'center', textColor: [51, 65, 85], fontSize: 8 },
+          3: { cellWidth: 28, halign: 'center', textColor: [51, 65, 85], fontSize: 7.5 },
+          4: { cellWidth: 28, halign: 'center' },
+          5: { cellWidth: 26, halign: 'center' },
+          6: { cellWidth: 24, halign: 'center' },
         };
 
     autoTable(doc, {
       startY: currentY,
       head: [tableHeaders],
       body: candidateRankRows,
-      theme: 'grid',
+      theme: 'plain',
       headStyles: {
         fillColor: [0, 128, 55],
         textColor: [255, 255, 255],
         fontStyle: 'bold',
-        fontSize: hasQuestionSections ? 6.5 : 7.5,
+        fontSize: hasQuestionSections ? 7 : 8,
         halign: 'center',
-        cellPadding: hasQuestionSections ? 1 : 1.2,
+        valign: 'middle',
+        cellPadding: 2.2,
+      },
+      bodyStyles: {
+        minCellHeight: 15,
+        valign: 'middle',
       },
       columnStyles: colStyles as any,
       didParseCell: (data) => {
         if (data.section === 'body') {
-          const rowRaw = data.row.raw as any[];
-          const status = rowRaw[5];
-          const isAttempted = status !== 'Not Attempted';
-
-          // Status column (col 5)
-          if (data.column.index === 5) {
-            data.cell.styles.halign = 'center';
-            data.cell.styles.fontStyle = 'bold';
-            if (status === 'Limit Exceeded') {
-              data.cell.styles.fillColor = [254, 226, 226]; // Soft Red (#FEE2E2)
-              data.cell.styles.textColor = [185, 28, 28]; // Dark Red (#B91C1C)
-            } else if (status === 'Normal Submit') {
-              data.cell.styles.fillColor = [220, 252, 231]; // Soft Green (#DCFCE7)
-              data.cell.styles.textColor = [21, 128, 61]; // Dark Green (#15803D)
-            } else {
-              data.cell.styles.fillColor = [241, 245, 249];
-              data.cell.styles.textColor = [100, 116, 139];
-            }
+          const col = data.column.index;
+          const isCustom = col === 0 || col === 4 || col === 5 ||
+            (hasQuestionSections ? (col === 6 || col === 7 || col === 8 || col === 9) : (col === 6));
+          if (isCustom) {
+            data.cell.text = [];
           }
+        }
+      },
+      didDrawCell: (data) => {
+        if (data.section === 'body') {
+          const col = data.column.index;
+          const rowIdx = data.row.index;
+          const meta = candidateMetaList[rowIdx];
+          if (!meta) return;
 
-          // Corr column (col 6) - Excel Green heat cell
-          if (data.column.index === 6) {
-            data.cell.styles.halign = 'center';
-            data.cell.styles.fontStyle = 'bold';
-            const corrVal = parseInt(String(data.cell.raw ?? ''), 10);
-            if (isAttempted && !isNaN(corrVal)) {
-              if (corrVal > 0) {
-                data.cell.styles.fillColor = [220, 252, 231]; // Light green
-                data.cell.styles.textColor = [21, 128, 61];
-              } else {
-                data.cell.styles.fillColor = [248, 250, 252];
-                data.cell.styles.textColor = [148, 163, 184];
-              }
+          // Subtle horizontal divider between rows
+          doc.setDrawColor(226, 232, 240);
+          doc.setLineWidth(0.3);
+          doc.line(
+            data.cell.x,
+            data.cell.y + data.cell.height,
+            data.cell.x + data.cell.width,
+            data.cell.y + data.cell.height
+          );
+
+          const cellX = data.cell.x;
+          const cellY = data.cell.y;
+          const cellW = data.cell.width;
+          const cellH = data.cell.height;
+          const cx = cellX + cellW / 2;
+          const cy = cellY + cellH / 2;
+
+          if (col === 0) {
+            // Rank medal / badge
+            drawRankMedal(doc, cx, cy, meta.rankNum);
+          } else if (col === 4) {
+            // Score with horizontal progress bar
+            if (meta.isAttempted) {
+              drawScoreBar(doc, cellX, cellY, cellW, cellH, meta.scoreDisplay, meta.obtainedMarks, meta.totalMarks);
             } else {
-              data.cell.styles.textColor = [148, 163, 184];
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(8);
+              doc.setTextColor(148, 163, 184);
+              doc.text('-', cx, cy + 0.8, { align: 'center' });
             }
-          }
-
-          // Wrong column (col 7) - Excel Red heat cell
-          if (data.column.index === 7) {
-            data.cell.styles.halign = 'center';
-            data.cell.styles.fontStyle = 'bold';
-            const wrongVal = parseInt(String(data.cell.raw ?? ''), 10);
-            if (isAttempted && !isNaN(wrongVal)) {
-              if (wrongVal > 0) {
-                data.cell.styles.fillColor = [254, 226, 226]; // Light red
-                data.cell.styles.textColor = [185, 28, 28];
-              } else {
-                data.cell.styles.fillColor = [240, 253, 244]; // Green clean 0 wrong
-                data.cell.styles.textColor = [22, 163, 74];
-              }
+          } else if (col === 5) {
+            // Accuracy donut gauge
+            if (meta.isAttempted) {
+              drawAccuracyDonut(doc, cx, cy, meta.percentage);
             } else {
-              data.cell.styles.textColor = [148, 163, 184];
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(8);
+              doc.setTextColor(148, 163, 184);
+              doc.text('-', cx, cy + 0.8, { align: 'center' });
             }
-          }
-
-          // Score column (col 8)
-          if (data.column.index === 8) {
-            data.cell.styles.halign = 'center';
-            data.cell.styles.fontStyle = 'bold';
-            data.cell.styles.textColor = isAttempted ? [30, 41, 59] : [148, 163, 184];
-          }
-
-          // Accuracy column (col 9) - Excel 3-Color Scale Heat Map
-          if (data.column.index === 9) {
-            data.cell.styles.halign = 'center';
-            data.cell.styles.fontStyle = 'bold';
-            if (isAttempted) {
-              const pctVal = parseFloat(String(data.cell.raw ?? ''));
-              if (!isNaN(pctVal)) {
-                if (pctVal >= 75) {
-                  data.cell.styles.fillColor = [220, 252, 231]; // Excel Green heat cell
-                  data.cell.styles.textColor = [21, 128, 61];
-                } else if (pctVal >= 50) {
-                  data.cell.styles.fillColor = [254, 249, 195]; // Excel Yellow/Amber heat cell
-                  data.cell.styles.textColor = [161, 98, 7];
-                } else {
-                  data.cell.styles.fillColor = [254, 226, 226]; // Excel Red heat cell
-                  data.cell.styles.textColor = [185, 28, 28];
-                }
-              }
-            } else {
-              data.cell.styles.textColor = [148, 163, 184];
-            }
-          }
-
-          // Strong Section column (col 10 if hasQuestionSections)
-          if (strongSecColIdx !== -1 && data.column.index === strongSecColIdx) {
-            data.cell.styles.halign = 'center';
-            data.cell.styles.fontStyle = 'bold';
-            const val = data.cell.raw;
-            if (val && val !== '-') {
-              data.cell.styles.fillColor = [220, 252, 231]; // Soft Green
-              data.cell.styles.textColor = [21, 128, 61]; // Dark Green
-            } else {
-              data.cell.styles.textColor = [148, 163, 184];
-            }
-          }
-
-          // Average Section column (col 11 if hasQuestionSections)
-          if (avgSecColIdx !== -1 && data.column.index === avgSecColIdx) {
-            data.cell.styles.halign = 'center';
-            data.cell.styles.fontStyle = 'bold';
-            const val = data.cell.raw;
-            if (val && val !== '-') {
-              data.cell.styles.fillColor = [254, 249, 195]; // Soft Yellow/Amber
-              data.cell.styles.textColor = [161, 98, 7]; // Dark Amber
-            } else {
-              data.cell.styles.textColor = [148, 163, 184];
-            }
-          }
-
-          // Weak Section column (col 12 if hasQuestionSections)
-          if (weakSecColIdx !== -1 && data.column.index === weakSecColIdx) {
-            data.cell.styles.halign = 'center';
-            data.cell.styles.fontStyle = 'bold';
-            const val = data.cell.raw;
-            if (val && val !== '-') {
-              data.cell.styles.fillColor = [254, 226, 226]; // Soft Red/Pink
-              data.cell.styles.textColor = [185, 28, 28]; // Dark Red
-            } else {
-              data.cell.styles.textColor = [148, 163, 184];
-            }
-          }
-
-          // Result column - Status Badge
-          if (data.column.index === resultColIdx) {
-            data.cell.styles.halign = 'center';
-            data.cell.styles.fontStyle = 'bold';
-            const resVal = data.cell.raw;
-            if (resVal === 'PASSED') {
-              data.cell.styles.fillColor = [220, 252, 231];
-              data.cell.styles.textColor = [21, 128, 61];
-            } else if (resVal === 'FAILED') {
-              data.cell.styles.fillColor = [254, 226, 226];
-              data.cell.styles.textColor = [185, 28, 28];
-            } else {
-              data.cell.styles.fillColor = [241, 245, 249];
-              data.cell.styles.textColor = [100, 116, 139];
-            }
-          }
-
-          // Tabs column - Tab violation heat cell
-          if (data.column.index === tabsColIdx) {
-            data.cell.styles.halign = 'center';
-            data.cell.styles.fontStyle = 'bold';
-            const tabVal = parseInt(String(data.cell.raw ?? ''), 10);
-            if (isAttempted && !isNaN(tabVal)) {
-              if (tabVal >= 3 || status === 'Limit Exceeded') {
-                data.cell.styles.fillColor = [254, 226, 226]; // Red violation
-                data.cell.styles.textColor = [185, 28, 28];
-              } else if (tabVal > 0) {
-                data.cell.styles.fillColor = [254, 249, 195]; // Amber caution
-                data.cell.styles.textColor = [161, 98, 7];
-              } else {
-                data.cell.styles.fillColor = [240, 253, 244]; // Green clean
-                data.cell.styles.textColor = [21, 128, 61];
-              }
-            } else {
-              data.cell.styles.textColor = [148, 163, 184];
-            }
+          } else if (hasQuestionSections && col === 6) {
+            // Strong Sections Card
+            drawSectionCard(doc, cellX, cellY, cellW, cellH, meta.strongSection, 'strong');
+          } else if (hasQuestionSections && col === 7) {
+            // Average Sections Card
+            drawSectionCard(doc, cellX, cellY, cellW, cellH, meta.avgSection, 'avg');
+          } else if (hasQuestionSections && col === 8) {
+            // Weak Sections Card
+            drawSectionCard(doc, cellX, cellY, cellW, cellH, meta.weakSection, 'weak');
+          } else if (col === resultColIdx) {
+            // Result Pill
+            drawResultPill(doc, cellX, cellY, cellW, cellH, meta.resultStatus);
           }
         }
       },
       margin: { left: 10, right: 10 },
-      styles: { cellPadding: hasQuestionSections ? 1.2 : 1.5, font: 'helvetica', fontSize: hasQuestionSections ? 6.5 : 7, overflow: 'linebreak' },
     });
 
     currentY = (doc as any).lastAutoTable.finalY + 8;
@@ -1580,7 +1733,7 @@ export async function exportExamDetailedPdfReport(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(0, 128, 55);
-  doc.text('DETAILED QUESTION-BY-QUESTION ITEM BREAKDOWN', 14, currentY);
+  doc.text('DETAILED QUESTION WISE ANALYSIS', 14, currentY);
   currentY += 6;
 
   questionAnalysisList.forEach((qa) => {
@@ -1695,7 +1848,7 @@ export async function exportExamDetailedPdfReport(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(255, 255, 255);
-  doc.text('EXAMINATION 3D VISUAL ANALYTICS & CHARTS GALLERY', 18, currentY + 6.2);
+  doc.text('ASSESSMENT VISUAL ANALYTICS & CHARTS ', 18, currentY + 6.2);
   currentY += 13;
 
   const galleryChartHeight = 72;
