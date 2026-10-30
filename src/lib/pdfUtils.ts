@@ -931,9 +931,9 @@ function drawSectionCard(
     return;
   }
 
-  const cardX = cellX + 1.2;
+  const cardX = cellX + 1.0;
   const cardY = cellY + 1.2;
-  const cardW = cellW - 2.4;
+  const cardW = cellW - 2.0;
   const cardH = cellH - 2.4;
 
   if (type === 'strong') {
@@ -949,12 +949,22 @@ function drawSectionCard(
 
   doc.roundedRect(cardX, cardY, cardW, cardH, 1.5, 1.5, 'F');
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(6);
+  doc.setFontSize(5.8);
 
-  const lines = doc.splitTextToSize(text, cardW - 2);
-  const lineH = 2.6;
+  let lines: string[] = doc.splitTextToSize(text, cardW - 1.5);
+  const lineH = 2.4;
+  const maxLines = Math.max(1, Math.floor((cardH - 1.5) / lineH));
+  if (lines.length > maxLines) {
+    lines = lines.slice(0, maxLines);
+    if (lines[maxLines - 1]) {
+      lines[maxLines - 1] = lines[maxLines - 1].replace(/[….]+$/, '') + '…';
+    }
+  }
+
   const totalH = lines.length * lineH;
-  let startY = cardY + (cardH - totalH) / 2 + 2.0;
+  let startY = cardY + (cardH - totalH) / 2 + 1.8;
+  if (startY < cardY + 2.0) startY = cardY + 2.0;
+
   for (const l of lines) {
     doc.text(l, cardX + cardW / 2, startY, { align: 'center' });
     startY += lineH;
@@ -1458,21 +1468,40 @@ export async function exportExamDetailedPdfReport(
           const maxAcc = secScores[0].accuracy;
           const minAcc = secScores[secScores.length - 1].accuracy;
 
+                    const cleanSecName = (rawName: string) => {
+            let n = rawName.trim();
+            const lower = n.toLowerCase();
+            if (lower === 'mathematics') return 'Math';
+            if (lower === 'quantitative aptitude') return 'Quant';
+            if (lower === 'logical reasoning') return 'Logical';
+            if (lower === 'reading comprehension') return 'Reading';
+            if (lower === 'general knowledge') return 'GK';
+            if (n.includes(' - ')) {
+              const parts = n.split(' - ');
+              const lang = parts[0].trim();
+              const topic = parts[1].trim();
+              const shortTopic = topic.length > 10 ? topic.substring(0, 9).trim() + '…' : topic;
+              return `${lang}: ${shortTopic}`;
+            }
+            if (n.length > 14) {
+              return n.substring(0, 13).trim() + '…';
+            }
+            return n;
+          };
+
           const formatSecList = (items: { name: string; accuracy: number }[]) => {
             if (items.length === 0) return '-';
             const acc = items[0].accuracy;
             if (items.length >= distinctQuestionSections.length && distinctQuestionSections.length >= 3) {
               return `All (${acc}%)`;
             }
-            const shortNames = items.map((s) => {
-              const n = s.name.trim();
-              if (n.toLowerCase() === 'mathematics') return 'Math';
-              if (n.toLowerCase() === 'quantitative aptitude') return 'Quant';
-              if (n.toLowerCase() === 'logical reasoning') return 'Logical';
-              if (n.toLowerCase() === 'reading comprehension') return 'Reading';
-              return n;
-            });
-            return `${shortNames.join(', ')}\n(${acc}%)`;
+            if (items.length > 2) {
+              const firstTwo = items.slice(0, 2).map((s) => cleanSecName(s.name));
+              const remaining = items.length - 2;
+              return `${firstTwo.join(', ')}\n+${remaining} more (${acc}%)`;
+            }
+            const names = items.map((s) => cleanSecName(s.name));
+            return `${names.join(', ')}\n(${acc}%)`;
           };
 
           if (maxAcc > 0) {
