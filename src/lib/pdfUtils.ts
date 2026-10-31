@@ -1802,7 +1802,9 @@ export async function exportExamDetailedPdfReport(
     // Dynamically calculate header text widths to prevent overlap
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    const marksText = `Marks: +${qa.question.marks || 1} / -${qa.question.negativeMarks ?? examNegativeMarks}`;
+    const marksVal = safeNum(qa.question.marks, 1);
+    const negMarksVal = Math.abs(safeNum(qa.question.negativeMarks ?? examNegativeMarks, 0));
+    const marksText = `Marks: +${marksVal} / -${negMarksVal > 0 ? negMarksVal.toFixed(2) : '0'}`;
     const marksWidth = doc.getTextWidth(marksText);
 
     doc.setFont('helvetica', 'bold');
@@ -2758,8 +2760,8 @@ export async function exportQuestionPaperPdf(
   const contentWidth = pageWidth - leftMargin - rightMargin; // 186mm
 
   const logoDataUrl = await getLogoDataUrl();
-  const examNegMarks = exam.settings?.negativeMarks ?? 0;
-  const totalMarks = exam.questions.reduce((sum, q) => sum + (q.marks || 1), 0);
+  const examNegMarks = Math.abs(safeNum(exam.settings?.negativeMarks, 0));
+  const totalMarks = exam.questions.reduce((sum, q) => sum + safeNum(q.marks, 1), 0);
 
   let currentY = topMargin;
 
@@ -2861,8 +2863,8 @@ export async function exportQuestionPaperPdf(
 
   exam.questions.forEach((q, idx) => {
     const qNum = idx + 1;
-    const marks = q.marks || 1;
-    const negMarks = q.negativeMarks ?? examNegMarks;
+    const marks = safeNum(q.marks, 1);
+    const negMarks = Math.abs(safeNum(q.negativeMarks ?? examNegMarks, 0));
     const typeLabel = q.type === 'mcq' ? 'MCQ' : q.type === 'mcq-image' ? 'MCQ + Image' : q.type === 'true-false' ? 'True/False' : 'Reading Comprehension';
 
     // Parse question text into prose and code blocks
@@ -3250,14 +3252,17 @@ export async function exportQuestionPaperPdf(
     doc.text('Answer Key Summary', leftMargin, currentY);
     currentY += 4;
 
-    const keyRows = exam.questions.map((q, idx) => [
-      `Q${idx + 1}`,
-      String.fromCharCode(65 + (q.correctAnswer ?? 0)),
-      (q.options[q.correctAnswer] || '').replace(/\s+/g, ' ').substring(0, 40),
-      `+${q.marks || 1}`,
-      (q.negativeMarks ?? examNegMarks) > 0 ? `-${q.negativeMarks ?? examNegMarks}` : '0',
-      q.section || 'General',
-    ]);
+    const keyRows = exam.questions.map((q, idx) => {
+      const qNeg = Math.abs(safeNum(q.negativeMarks ?? examNegMarks, 0));
+      return [
+        `Q${idx + 1}`,
+        String.fromCharCode(65 + (q.correctAnswer ?? 0)),
+        (q.options[q.correctAnswer] || '').replace(/\s+/g, ' ').substring(0, 40),
+        `+${safeNum(q.marks, 1)}`,
+        qNeg > 0 ? `-${qNeg.toFixed(2)}` : '0',
+        q.section || 'General',
+      ];
+    });
 
     autoTable(doc, {
       startY: currentY,
