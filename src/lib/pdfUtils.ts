@@ -39,7 +39,10 @@ function formatPct(val: any): string {
 // Helper: Convert logo image to base64 Data URL
 async function getLogoDataUrl(): Promise<string | null> {
   try {
-    const response = await fetch('/atom shaale logo.png');
+    let response = await fetch('/pdf image.png');
+    if (!response.ok) {
+      response = await fetch('/atom shaale logo.png');
+    }
     if (!response.ok) return null;
     const blob = await response.blob();
     return new Promise((resolve) => {
@@ -1130,11 +1133,8 @@ export async function exportExamDetailedPdfReport(
 
   // Helper for Header Banner on Cover Page
   const drawCoverHeader = () => {
-    doc.setFillColor(0, 128, 55);
-    doc.rect(0, 0, pageWidth, 26, 'F');
-
-    doc.setFillColor(16, 185, 129);
-    doc.rect(0, 26, pageWidth, 1.5, 'F');
+    doc.setFillColor(0, 0, 0);
+    doc.rect(0, 0, pageWidth, 27.5, 'F');
 
     if (logoDataUrl) {
       try {
@@ -1158,7 +1158,7 @@ export async function exportExamDetailedPdfReport(
     doc.text('ASSESSMENT PERFORMANCE REPORT', pageWidth - 14, 12, { align: 'right' });
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    doc.setTextColor(220, 252, 231);
+    doc.setTextColor(209, 213, 219);
     doc.text(`Generated: ${formatDateTime(new Date().toISOString())}`, pageWidth - 14, 18, { align: 'right' });
   };
 
@@ -1769,7 +1769,28 @@ export async function exportExamDetailedPdfReport(
     const splitQText = doc.splitTextToSize(`"${qa.question.text}"`, pageWidth - 32);
     const qTextHeight = splitQText.length * 4.2 + 2;
     const optionRowsCount = (qa.question.options || []).length || 4;
-    const estCardHeight = 10.5 + qTextHeight + 3.5 + (optionRowsCount + 1) * 6 + 6;
+
+    // Dynamically calculate header text widths to prevent overlap
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    const marksText = `Marks: +${qa.question.marks || 1} / -${qa.question.negativeMarks ?? examNegativeMarks}`;
+    const marksWidth = doc.getTextWidth(marksText);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    const tierText = `Tier: ${qa.diff} (${qa.accuracy}% Accuracy)`;
+    const tierWidth = doc.getTextWidth(tierText);
+
+    const fullTitle = `Question #${qa.qNumber}  [${qa.question.section || 'General'}]`;
+    const fullTitleWidth = doc.getTextWidth(fullTitle);
+
+    // Total content width inside header bar
+    const contentWidth = (pageWidth - 17) - 17; // 176 mm
+    const rightSideWidth = marksWidth + 5 + tierWidth;
+    const isSingleLine = fullTitleWidth + rightSideWidth + 4 <= contentWidth;
+
+    const cardHeaderH = isSingleLine ? 7.5 : 12;
+    const estCardHeight = cardHeaderH + 3 + qTextHeight + 3.5 + (optionRowsCount + 1) * 6 + 6;
 
     if (currentY + estCardHeight > pageHeight - 18) {
       doc.addPage();
@@ -1778,23 +1799,54 @@ export async function exportExamDetailedPdfReport(
 
     // Card Header Bar
     doc.setFillColor(240, 253, 244);
-    doc.rect(14, currentY, pageWidth - 28, 7.5, 'F');
+    doc.rect(14, currentY, pageWidth - 28, cardHeaderH, 'F');
     doc.setDrawColor(167, 243, 208);
-    doc.rect(14, currentY, pageWidth - 28, 7.5, 'S');
+    doc.rect(14, currentY, pageWidth - 28, cardHeaderH, 'S');
 
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(0, 128, 55);
-    doc.text(`Question #${qa.qNumber}  [${qa.question.section || 'General'}]`, 17, currentY + 5);
+    // Tier badge color
+    const tierR = qa.diff === 'Easy' ? 5 : qa.diff === 'Challenging' ? 225 : 217;
+    const tierG = qa.diff === 'Easy' ? 150 : qa.diff === 'Challenging' ? 29 : 119;
+    const tierB = qa.diff === 'Easy' ? 105 : qa.diff === 'Challenging' ? 72 : 6;
 
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(qa.diff === 'Easy' ? 5 : qa.diff === 'Challenging' ? 225 : 217, qa.diff === 'Easy' ? 150 : qa.diff === 'Challenging' ? 29 : 119, qa.diff === 'Easy' ? 105 : qa.diff === 'Challenging' ? 72 : 6);
-    doc.text(`Tier: ${qa.diff} (${qa.accuracy}% Accuracy)`, 95, currentY + 5);
+    if (isSingleLine) {
+      // Single line layout: Question Title (left), Tier (right-middle), Marks (right)
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(0, 128, 55);
+      doc.text(fullTitle, 17, currentY + 5);
 
-    doc.setTextColor(100, 116, 139);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Marks: +${qa.question.marks || 1} / -${qa.question.negativeMarks ?? examNegativeMarks}`, pageWidth - 17, currentY + 5, { align: 'right' });
-    currentY += 10.5;
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(tierR, tierG, tierB);
+      doc.text(tierText, pageWidth - 17 - marksWidth - 5, currentY + 5, { align: 'right' });
+
+      doc.setTextColor(100, 116, 139);
+      doc.setFont('helvetica', 'normal');
+      doc.text(marksText, pageWidth - 17, currentY + 5, { align: 'right' });
+    } else {
+      // Two-line layout: Line 1 = Question # + Tier + Marks; Line 2 = Full Section Title
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(0, 128, 55);
+      doc.text(`Question #${qa.qNumber}`, 17, currentY + 4.5);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(tierR, tierG, tierB);
+      doc.text(tierText, pageWidth - 17 - marksWidth - 5, currentY + 4.5, { align: 'right' });
+
+      doc.setTextColor(100, 116, 139);
+      doc.setFont('helvetica', 'normal');
+      doc.text(marksText, pageWidth - 17, currentY + 4.5, { align: 'right' });
+
+      // Line 2: Section title
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.8);
+      doc.setTextColor(0, 128, 55);
+      const sectionText = `[${qa.question.section || 'General'}]`;
+      const splitSection = doc.splitTextToSize(sectionText, contentWidth);
+      doc.text(splitSection[0], 17, currentY + 9.2);
+    }
+
+    currentY += cardHeaderH + 3;
 
     // Full Question Text
     doc.setFont('helvetica', 'bold');

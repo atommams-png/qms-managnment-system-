@@ -83,7 +83,7 @@ router.post('/', async (req, res) => {
     );
 
     if (existing.length > 0) {
-      return res.status(400).json({ error: 'Duplicate: Student already registered for this exam' });
+      return res.status(400).json({ error: 'Student already registered for this exam' });
     }
 
     const id = generateUUID();
