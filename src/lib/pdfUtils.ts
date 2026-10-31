@@ -982,13 +982,12 @@ function drawResultPill(
   cellH: number,
   status: string
 ) {
-  const pillW = Math.min(cellW - 2, 13);
-  const pillH = 6;
-  const pillX = cellX + (cellW - pillW) / 2;
-  const pillY = cellY + (cellH - pillH) / 2;
-  const r = pillH / 2;
-
   if (status === 'PASSED') {
+    const pillW = Math.min(cellW - 2, 14);
+    const pillH = 6;
+    const pillX = cellX + (cellW - pillW) / 2;
+    const pillY = cellY + (cellH - pillH) / 2;
+    const r = pillH / 2;
     doc.setFillColor(220, 252, 231);
     doc.roundedRect(pillX, pillY, pillW, pillH, r, r, 'F');
     doc.setFont('helvetica', 'bold');
@@ -996,6 +995,11 @@ function drawResultPill(
     doc.setTextColor(21, 128, 61);
     doc.text('PASSED', cellX + cellW / 2, cellY + cellH / 2 + 0.9, { align: 'center' });
   } else if (status === 'FAILED') {
+    const pillW = Math.min(cellW - 2, 14);
+    const pillH = 6;
+    const pillX = cellX + (cellW - pillW) / 2;
+    const pillY = cellY + (cellH - pillH) / 2;
+    const r = pillH / 2;
     doc.setFillColor(254, 226, 226);
     doc.roundedRect(pillX, pillY, pillW, pillH, r, r, 'F');
     doc.setFont('helvetica', 'bold');
@@ -1003,12 +1007,31 @@ function drawResultPill(
     doc.setTextColor(185, 28, 28);
     doc.text('FAILED', cellX + cellW / 2, cellY + cellH / 2 + 0.9, { align: 'center' });
   } else {
+    // Registered – Not Attempted.
+    const pillW = Math.min(cellW - 1, 21);
+    const pillH = 9.8;
+    const pillX = cellX + (cellW - pillW) / 2;
+    const pillY = cellY + (cellH - pillH) / 2;
+    const r = 2;
+
     doc.setFillColor(241, 245, 249);
-    doc.roundedRect(pillX, pillY, pillW, pillH, r, r, 'F');
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(pillX, pillY, pillW, pillH, r, r, 'FD');
+
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
+    doc.setFontSize(4.6);
     doc.setTextColor(100, 116, 139);
-    doc.text('ABSENT', cellX + cellW / 2, cellY + cellH / 2 + 0.9, { align: 'center' });
+
+    const fullMsg = 'Registered – Not Attempted.';
+    const lines = doc.splitTextToSize(fullMsg, pillW - 1.5);
+    const lineSpacing = 2.4;
+    const totalTextH = (lines.length - 1) * lineSpacing;
+    const startY = cellY + cellH / 2 - totalTextH / 2 + 0.6;
+
+    lines.forEach((l: string, i: number) => {
+      doc.text(l, cellX + cellW / 2, startY + i * lineSpacing, { align: 'center' });
+    });
   }
 }
 
@@ -1028,10 +1051,12 @@ export async function exportExamDetailedPdfReport(
 
   // Calculate candidate results mapping
   const candidateResults = targetCandidates.map((c) => {
-    const attempt = attempts.find((a) => a.candidateId === c.id);
-    const result = results.find((r) => r.candidateId === c.id);
+    const result = results.find((r) => String(r.candidateId) === String(c.id));
+    const attempt = attempts.find(
+      (a) => String(a.candidateId) === String(c.id) || (result && String(a.id) === String(result.attemptId))
+    );
 
-    let isAttempted = !!attempt && (attempt.isSubmitted || (attempt.answers && attempt.answers.length > 0));
+    let isAttempted = !!result || (!!attempt && (attempt.isSubmitted || (attempt.answers && attempt.answers.length > 0)));
     let correct = safeNum(result?.correctAnswers, 0);
     let wrong = safeNum(result?.wrongAnswers, 0);
     let obtainedMarks = safeNum(result?.obtainedMarks, 0);
@@ -1574,25 +1599,25 @@ export async function exportExamDetailedPdfReport(
 
     const colStyles = hasQuestionSections
       ? {
-          0: { cellWidth: 13, halign: 'center' },
+          0: { cellWidth: 11, halign: 'center' },
           1: { cellWidth: 22, fontStyle: 'bold', textColor: [15, 23, 42], fontSize: 8 },
           2: { cellWidth: 17, halign: 'center', textColor: [51, 65, 85], fontSize: 7.5 },
           3: { cellWidth: 16, halign: 'center', textColor: [51, 65, 85], fontSize: 7 },
-          4: { cellWidth: 18, halign: 'center' },
-          5: { cellWidth: 18, halign: 'center' },
-          6: { cellWidth: 25, halign: 'center' },
-          7: { cellWidth: 23, halign: 'center' },
-          8: { cellWidth: 23, halign: 'center' },
-          9: { cellWidth: 15, halign: 'center' },
+          4: { cellWidth: 17, halign: 'center' },
+          5: { cellWidth: 17, halign: 'center' },
+          6: { cellWidth: 24, halign: 'center' },
+          7: { cellWidth: 22, halign: 'center' },
+          8: { cellWidth: 22, halign: 'center' },
+          9: { cellWidth: 22, halign: 'center' },
         }
       : {
           0: { cellWidth: 16, halign: 'center' },
           1: { cellWidth: 40, fontStyle: 'bold', textColor: [15, 23, 42], fontSize: 8.5 },
           2: { cellWidth: 28, halign: 'center', textColor: [51, 65, 85], fontSize: 8 },
           3: { cellWidth: 28, halign: 'center', textColor: [51, 65, 85], fontSize: 7.5 },
-          4: { cellWidth: 28, halign: 'center' },
-          5: { cellWidth: 26, halign: 'center' },
-          6: { cellWidth: 24, halign: 'center' },
+          4: { cellWidth: 26, halign: 'center' },
+          5: { cellWidth: 24, halign: 'center' },
+          6: { cellWidth: 28, halign: 'center' },
         };
 
     autoTable(doc, {
@@ -1766,7 +1791,11 @@ export async function exportExamDetailedPdfReport(
   currentY += 6;
 
   questionAnalysisList.forEach((qa) => {
-    const splitQText = doc.splitTextToSize(`"${qa.question.text}"`, pageWidth - 32);
+    // Explicitly set font and font size BEFORE splitTextToSize so line wrapping matches rendering font exactly
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    const maxQTextWidth = (pageWidth - 16) - 16 - 2; // 176mm, perfectly aligned inside table margin (16mm to 192mm)
+    const splitQText = doc.splitTextToSize(`"${qa.question.text}"`, maxQTextWidth);
     const qTextHeight = splitQText.length * 4.2 + 2;
     const optionRowsCount = (qa.question.options || []).length || 4;
 

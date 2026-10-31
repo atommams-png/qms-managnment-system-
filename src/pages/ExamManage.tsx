@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getAdminSession, getExam, getExams, getExamByCode, addQuestion, updateQuestion, deleteQuestion, getCandidates, getResults, getAttempts, exportResultsCSV } from '@/lib/store';
+import { getAdminSession, getExam, getExams, getExamByCode, addQuestion, updateQuestion, deleteQuestion, getCandidates, getResults, getAttempts, autoSubmitExpiredAttempts, exportResultsCSV } from '@/lib/store';
 import { Exam, ExamResult, Candidate, ExamAttempt } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { ImageUploadInput } from '@/components/ImageUploadInput';
 import { exportExamResultsToExcel, previewQuestionsFromExcel, downloadQuestionsTemplate, downloadExamQuestionPaper } from '@/lib/excelUtils';
 import { exportExamDetailedPdfReport, ComparisonExamData, exportQuestionPaperPdf } from '@/lib/pdfUtils';
-import { formatExamScheduleDateTime } from '@/lib/dateUtils';
+import { formatExamScheduleDateTime, parseExamScheduleDate } from '@/lib/dateUtils';
 import Header from '@/components/Header';
 import { ExamResults3DAnalytics } from '@/components/ExamResults3DAnalytics';
 import DeviceBadge from '@/components/DeviceBadge';
@@ -85,7 +85,27 @@ const ExamManage = () => {
   const [isLoadingComparison, setIsLoadingComparison] = useState<boolean>(false);
   const [comparisonError, setComparisonError] = useState<string>('');
 
-  const liveActiveCount = attempts.filter(a => !a.isSubmitted).length;
+  const isExamExpired = useMemo(() => {
+    if (!exam?.endDateTime) return false;
+    const end = parseExamScheduleDate(exam.endDateTime);
+    return Boolean(end && new Date() > end);
+  }, [exam?.endDateTime]);
+
+  const liveActiveCount = useMemo(() => {
+    if (isExamExpired) return 0;
+    const durationMins = exam?.settings?.duration || 0;
+    const now = Date.now();
+    return attempts.filter(a => {
+      if (a.isSubmitted) return false;
+      if (durationMins > 0 && a.startedAt) {
+        const started = new Date(a.startedAt).getTime();
+        if (!isNaN(started) && now > started + durationMins * 60 * 1000 + 60000) {
+          return false;
+        }
+      }
+      return true;
+    }).length;
+  }, [attempts, isExamExpired, exam?.settings?.duration]);
 
   const questionFileRef = useRef<HTMLInputElement>(null);
   const imageUploadSectionRef = useRef<HTMLDivElement>(null);
@@ -169,6 +189,12 @@ const ExamManage = () => {
       if (!e) {
         setExam(null);
       } else {
+        if (e.endDateTime) {
+          const end = parseExamScheduleDate(e.endDateTime);
+          if (end && new Date() > end) {
+            await autoSubmitExpiredAttempts(id).catch(() => {});
+          }
+        }
         setExam({
           ...e,
           questions: Array.isArray(e.questions) ? e.questions : [],

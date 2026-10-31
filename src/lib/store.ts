@@ -223,6 +223,10 @@ export async function getAttempts(examId?: string): Promise<ExamAttempt[]> {
   return await api.getAttempts(examId);
 }
 
+export async function autoSubmitExpiredAttempts(examId?: string): Promise<{ submittedCount: number }> {
+  return await api.autoSubmitExpiredAttempts(examId);
+}
+
 export async function getAttempt(id: string): Promise<ExamAttempt | undefined> {
   return await api.getAttempt(id);
 }

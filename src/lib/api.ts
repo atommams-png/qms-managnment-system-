@@ -605,6 +605,21 @@ export async function getAttempts(examId?: string) {
   }
 }
 
+export async function autoSubmitExpiredAttempts(examId?: string): Promise<{ submittedCount: number }> {
+  try {
+    if (!examId) return { submittedCount: 0 };
+    const res = await fetch(`${API_URL}/attempts/exam/${examId}/auto-submit-expired`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    return data.data || { submittedCount: 0 };
+  } catch (error) {
+    console.error('Auto-submit expired error:', error);
+    return { submittedCount: 0 };
+  }
+}
+
 export async function getAttempt(id: string) {
   try {
     const res = await fetch(`${API_URL}/attempts/${id}`);

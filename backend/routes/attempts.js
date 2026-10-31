@@ -489,12 +489,187 @@ router.post('/:id/submit', async (req, res) => {
 });
 
 // ============================================================
+// AUTO-SUBMIT EXPIRED ATTEMPTS (For expired exam schedule or elapsed duration)
+// ============================================================
+export async function autoSubmitExpiredAttempts(examId) {
+  if (!examId) return { submittedCount: 0 };
+  let connection;
+  try {
+    await ensureAttemptColumns();
+
+    // 1. Fetch exam details
+    const [exams] = await pool.execute(
+      `SELECT id, duration, start_date_time, end_date_time, marks_per_question, negative_marks 
+       FROM exams WHERE id = ?`,
+      [examId]
+    );
+
+    if (exams.length === 0) return { submittedCount: 0 };
+    const exam = exams[0];
+
+    const now = new Date();
+    const isExamWindowExpired = exam.end_date_time && (now > new Date(exam.end_date_time));
+    const durationMins = Number(exam.duration) || 0;
+
+    // 2. Fetch unsubmitted attempts for this exam
+    const [unsubmittedAttempts] = await pool.execute(
+      `SELECT * FROM exam_attempts WHERE exam_id = ? AND is_submitted = 0`,
+      [examId]
+    );
+
+    if (unsubmittedAttempts.length === 0) return { submittedCount: 0 };
+
+    // 3. Filter attempts that should be auto-submitted:
+    // Either overall exam window has expired, OR (started_at + duration + 1 min grace buffer) < now
+    const expiredAttempts = unsubmittedAttempts.filter(attempt => {
+      if (isExamWindowExpired) return true;
+      if (durationMins > 0 && attempt.started_at) {
+        const startedTime = new Date(attempt.started_at).getTime();
+        if (!isNaN(startedTime)) {
+          const expiryTime = startedTime + (durationMins * 60 * 1000) + 60000;
+          if (now.getTime() > expiryTime) return true;
+        }
+      }
+      return false;
+    });
+
+    if (expiredAttempts.length === 0) return { submittedCount: 0 };
+
+    // 4. Fetch questions for grading
+    const canUseQuestionNegativeMarks = await supportsQuestionNegativeMarks();
+    const questionQuery = canUseQuestionNegativeMarks
+      ? 'SELECT id, correct_answer, marks, negative_marks FROM questions WHERE exam_id = ?'
+      : 'SELECT id, correct_answer, marks FROM questions WHERE exam_id = ?';
+
+    const [questions] = await pool.execute(questionQuery, [examId]);
+    const defaultMarks = Number(exam.marks_per_question ?? 1) || 1;
+    const defaultNegativeMarks = Number(exam.negative_marks ?? 0) || 0;
+
+    let submittedCount = 0;
+
+    for (const attempt of expiredAttempts) {
+      connection = await pool.getConnection();
+      await connection.beginTransaction();
+
+      try {
+        const answers = safeJsonParse(attempt.answers, []);
+
+        let correct = 0, wrong = 0, unanswered = 0;
+        let totalMarks = 0;
+        let obtainedMarks = 0;
+
+        questions.forEach(question => {
+          const qMarks = Number(question.marks ?? defaultMarks) || defaultMarks;
+          const qNegMarks = question.negative_marks === null || question.negative_marks === undefined
+            ? defaultNegativeMarks
+            : Number(question.negative_marks) || 0;
+
+          totalMarks += qMarks;
+
+          const ans = answers.find(a => a.questionId === question.id);
+          if (!ans || ans.selectedAnswer === null || ans.selectedAnswer === undefined) {
+            unanswered++;
+          } else if (Number(ans.selectedAnswer) === Number(question.correct_answer)) {
+            correct++;
+            obtainedMarks += qMarks;
+          } else {
+            wrong++;
+            obtainedMarks -= qNegMarks;
+          }
+        });
+
+        obtainedMarks = Math.max(0, obtainedMarks);
+        const percentage = totalMarks > 0 ? Math.round((obtainedMarks / totalMarks) * 100) : 0;
+
+        // Calculate appropriate submitted_at timestamp
+        let submittedAt = now;
+        if (exam.end_date_time && new Date(exam.end_date_time) < now) {
+          submittedAt = new Date(exam.end_date_time);
+        } else if (durationMins > 0 && attempt.started_at) {
+          const calculatedExpiry = new Date(new Date(attempt.started_at).getTime() + durationMins * 60 * 1000);
+          if (calculatedExpiry < now) submittedAt = calculatedExpiry;
+        }
+
+        const pad = n => String(n).padStart(2, '0');
+        const formattedSubmittedAt = `${submittedAt.getFullYear()}-${pad(submittedAt.getMonth() + 1)}-${pad(submittedAt.getDate())} ${pad(submittedAt.getHours())}:${pad(submittedAt.getMinutes())}:${pad(submittedAt.getSeconds())}`;
+
+        // Update attempt
+        await connection.execute(
+          `UPDATE exam_attempts 
+           SET is_submitted = 1, submitted_at = ? 
+           WHERE id = ? AND is_submitted = 0`,
+          [formattedSubmittedAt, attempt.id]
+        );
+
+        // Upsert result
+        const resultId = generateUUID();
+        await connection.execute(
+          `INSERT INTO exam_results (
+            id, attempt_id, candidate_id, exam_id, total_questions,
+            correct_answers, wrong_answers, unanswered, total_marks,
+            obtained_marks, percentage
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE
+            total_questions = VALUES(total_questions),
+            correct_answers = VALUES(correct_answers),
+            wrong_answers = VALUES(wrong_answers),
+            unanswered = VALUES(unanswered),
+            total_marks = VALUES(total_marks),
+            obtained_marks = VALUES(obtained_marks),
+            percentage = VALUES(percentage)`,
+          [
+            resultId, attempt.id, attempt.candidate_id, attempt.exam_id,
+            questions.length, correct, wrong, unanswered,
+            totalMarks, obtainedMarks, percentage
+          ]
+        );
+
+        await connection.commit();
+        submittedCount++;
+      } catch (err) {
+        if (connection) await connection.rollback();
+        console.error(`Error auto-submitting attempt ${attempt.id}:`, err);
+      } finally {
+        if (connection) connection.release();
+        connection = null;
+      }
+    }
+
+    return { submittedCount };
+  } catch (err) {
+    console.error('Error in autoSubmitExpiredAttempts:', err);
+    return { submittedCount: 0, error: err.message };
+  }
+}
+
+// ============================================================
+// TRIGGER AUTO-SUBMIT FOR EXPIRED ATTEMPTS
+// ============================================================
+router.post('/exam/:examId/auto-submit-expired', async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const result = await autoSubmitExpiredAttempts(examId);
+    res.json({
+      success: true,
+      data: result,
+      message: `Auto-submitted ${result.submittedCount} expired attempts`
+    });
+  } catch (error) {
+    console.error('Auto-submit expired error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================================
 // GET ATTEMPTS FOR EXAM
 // ============================================================
 router.get('/exam/:examId', async (req, res) => {
   try {
     await ensureAttemptColumns();
     const { examId } = req.params;
+
+    // Automatically auto-submit any expired attempts before returning
+    await autoSubmitExpiredAttempts(examId);
 
     const [attempts] = await pool.execute(
       `SELECT ea.*, c.name, c.usn, c.email, c.department, c.college, c.section,

@@ -1,3 +1,4 @@
+import { parseExamScheduleDate } from '@/lib/dateUtils';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { getExam, getExamAccessStatus, startAttempt, updateAttempt, submitAttempt, getCandidate } from '@/lib/store';
@@ -164,7 +165,20 @@ const TakeExam = () => {
         setAnswers(initialAnswers);
         questionTimesRef.current = Object.fromEntries(qs.map(q => [q.id, 0]));
         questionEnteredAtRef.current = Date.now();
-        setTimeLeft(e.settings.duration * 60);
+        let calculatedDuration = e.settings.duration * 60;
+        if (e.endDateTime) {
+          const endDate = parseExamScheduleDate(e.endDateTime);
+          if (endDate) {
+            const secondsUntilEnd = Math.floor((endDate.getTime() - Date.now()) / 1000);
+            if (secondsUntilEnd <= 0) {
+              toast.error('This exam has already ended.');
+              navigate('/');
+              return;
+            }
+            calculatedDuration = Math.min(calculatedDuration, secondsUntilEnd);
+          }
+        }
+        setTimeLeft(calculatedDuration);
 
       } catch (error) {
         console.error('Error initializing exam:', error);
@@ -180,13 +194,20 @@ const TakeExam = () => {
   useEffect(() => {
     if (submitted || !exam) return;
     const timer = setInterval(() => {
+      if (exam.endDateTime) {
+        const endDate = parseExamScheduleDate(exam.endDateTime);
+        if (endDate && Date.now() >= endDate.getTime()) {
+          handleSubmit();
+          return;
+        }
+      }
       setTimeLeft(prev => {
         if (prev <= 1) { handleSubmit(); return 0; }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [submitted, exam]);
+  }, [submitted, exam, handleSubmit]);
 
   // Tab switch detection
   useEffect(() => {

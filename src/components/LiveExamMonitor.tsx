@@ -1,3 +1,5 @@
+import { parseExamScheduleDate } from '@/lib/dateUtils';
+import { autoSubmitExpiredAttempts } from '@/lib/store';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Exam, Candidate, ExamAttempt, ExamResult } from '@/lib/types';
 import { Card, CardContent } from '@/components/ui/card';
@@ -162,6 +164,26 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
   const maxTabSwitches = exam?.settings?.maxTabSwitches ?? 3;
   const totalQuestions = exam?.questions?.length || 0;
 
+  const isExamExpired = useMemo(() => {
+    if (!exam?.endDateTime) return false;
+    const endDate = parseExamScheduleDate(exam.endDateTime);
+    return Boolean(endDate && new Date() > endDate);
+  }, [exam?.endDateTime]);
+
+  // Auto-submit expired attempts on component mount/detect
+  useEffect(() => {
+    if (isExamExpired && attempts.some(a => !a.isSubmitted)) {
+      autoSubmitExpiredAttempts(exam.id)
+        .then(res => {
+          if (res.submittedCount > 0) {
+            toast.info(`Auto-submitted ${res.submittedCount} attempts from expired exam`);
+            onRefresh();
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isExamExpired, exam?.id, attempts]);
+
   // Build list of all candidates merged with attempts and results
   const allLiveCandidates: EnrichedLiveCandidate[] = useMemo(() => {
     // Map existing candidates
@@ -169,10 +191,22 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
       const attempt = attempts.find(a => a.candidateId === candidate.id);
       const result = results.find(r => r.candidateId === candidate.id || (attempt && r.attemptId === attempt.id));
 
+      const startedAt = attempt?.startedAt;
+      const submittedAt = attempt?.submittedAt;
+      const updatedAt = attempt?.updatedAt || attempt?.startedAt;
+
+      const durationMins = exam?.settings?.duration || 0;
+      const isDurationExpired = Boolean(
+        durationMins > 0 && startedAt &&
+        (Date.now() > new Date(startedAt).getTime() + durationMins * 60 * 1000 + 60000)
+      );
+      const isExpired = isExamExpired || isDurationExpired;
+
       const tabSwitches = attempt?.tabSwitches ?? 0;
       const isLimitExceeded = maxTabSwitches > 0 && tabSwitches >= maxTabSwitches;
-      const isSubmitted = Boolean(attempt?.isSubmitted || result);
-      const isLive = Boolean(attempt && !isSubmitted);
+      const isAutoSubmittedExpired = Boolean(attempt && !attempt.isSubmitted && !result && isExpired);
+      const isSubmitted = Boolean(attempt?.isSubmitted || result || isAutoSubmittedExpired);
+      const isLive = Boolean(attempt && !isSubmitted && !isExpired);
       const isNotStarted = !attempt;
       const hasTabViolation = tabSwitches > 0;
 
@@ -185,6 +219,9 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
       } else if (isLive) {
         status = hasTabViolation ? 'tab_alert' : 'live';
         statusLabel = hasTabViolation ? 'Tab Alert' : 'Live Active';
+      } else if (isAutoSubmittedExpired) {
+        status = 'submitted';
+        statusLabel = 'Auto-submitted (Expired)';
       } else if (isSubmitted) {
         status = 'submitted';
         statusLabel = 'Submitted';
@@ -201,10 +238,6 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
       const deviceOs = attempt?.deviceOs || candidate.deviceOs || '';
       const isDesktopMode = Boolean(attempt?.isDesktopMode ?? candidate.isDesktopMode);
       const deviceInfo = attempt?.deviceInfo || candidate.deviceInfo;
-
-      const startedAt = attempt?.startedAt;
-      const submittedAt = attempt?.submittedAt;
-      const updatedAt = attempt?.updatedAt || attempt?.startedAt;
 
       const { formatted: lastActiveFormatted, isActive: isHeartbeatActive } = formatTimeAgo(updatedAt);
       const timeElapsedFormatted = formatDuration(startedAt, submittedAt);
@@ -244,10 +277,18 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
     attempts.forEach(attempt => {
       if (!candidateIds.has(attempt.candidateId)) {
         const result = results.find(r => r.attemptId === attempt.id || r.candidateId === attempt.candidateId);
+        const durationMins = exam?.settings?.duration || 0;
+        const isDurationExpired = Boolean(
+          durationMins > 0 && attempt.startedAt &&
+          (Date.now() > new Date(attempt.startedAt).getTime() + durationMins * 60 * 1000 + 60000)
+        );
+        const isExpired = isExamExpired || isDurationExpired;
+
         const tabSwitches = attempt.tabSwitches ?? 0;
         const isLimitExceeded = maxTabSwitches > 0 && tabSwitches >= maxTabSwitches;
-        const isSubmitted = Boolean(attempt.isSubmitted || result);
-        const isLive = !isSubmitted;
+        const isAutoSubmittedExpired = Boolean(!attempt.isSubmitted && !result && isExpired);
+        const isSubmitted = Boolean(attempt.isSubmitted || result || isAutoSubmittedExpired);
+        const isLive = Boolean(!isSubmitted && !isExpired);
         const hasTabViolation = tabSwitches > 0;
 
         let status: EnrichedLiveCandidate['status'] = 'live';
@@ -258,6 +299,9 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
         } else if (isLive && hasTabViolation) {
           status = 'tab_alert';
           statusLabel = 'Tab Alert';
+        } else if (isAutoSubmittedExpired) {
+          status = 'submitted';
+          statusLabel = 'Auto-submitted (Expired)';
         } else if (isSubmitted) {
           status = 'submitted';
           statusLabel = 'Submitted';
@@ -779,7 +823,7 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
                     ) : c.isSubmitted ? (
                       <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs flex items-center gap-1">
                         <CheckCircle2 className="h-3 w-3" />
-                        Submitted
+                        {c.statusLabel === 'Auto-submitted (Expired)' ? 'Auto-submitted (Expired)' : 'Submitted'}
                       </span>
                     ) : (
                       <span className="bg-gray-200 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
@@ -790,26 +834,16 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
                 </div>
 
                 {/* Device & Hardware Telemetry Badge */}
-                <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-gray-50 border border-gray-200">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-[10px] font-bold uppercase text-gray-600 shrink-0">Device:</span>
-                    <DeviceBadge
-                      deviceLabel={c.deviceName}
-                      deviceType={c.deviceType}
-                      deviceOs={c.deviceOs}
-                      isDesktopMode={c.isDesktopMode}
-                      deviceInfo={c.deviceInfo}
-                      size="sm"
-                    />
-                  </div>
-                  <div className="text-[10px] text-gray-500 shrink-0">
-                    {c.timeElapsedFormatted !== '-' && (
-                      <span className="flex items-center gap-1 font-mono font-medium">
-                        <Clock className="h-3 w-3 text-emerald-600" />
-                        {c.timeElapsedFormatted}
-                      </span>
-                    )}
-                  </div>
+                <div className="flex items-center gap-1.5 p-2 rounded-lg bg-gray-50 border border-gray-200">
+                  <span className="text-[10px] font-bold uppercase text-gray-600 shrink-0">Device:</span>
+                  <DeviceBadge
+                    deviceLabel={c.deviceName}
+                    deviceType={c.deviceType}
+                    deviceOs={c.deviceOs}
+                    isDesktopMode={c.isDesktopMode}
+                    deviceInfo={c.deviceInfo}
+                    size="sm"
+                  />
                 </div>
 
                 {/* Tab Switches & Violation Gauge */}
@@ -1072,13 +1106,23 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
             <div className="space-y-4 pt-2">
               {/* Student Identity Card */}
               <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5">
-                <div>
-                  <h3 className="text-base font-extrabold text-gray-900">{selectedCandidate.candidate.name}</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs text-gray-700 mt-1">
-                    <div><span className="font-semibold text-gray-500">USN:</span> {selectedCandidate.candidate.usn || 'N/A'}</div>
-                    <div><span className="font-semibold text-gray-500">Email:</span> {selectedCandidate.candidate.email || 'N/A'}</div>
-                    <div><span className="font-semibold text-gray-500">Dept:</span> {selectedCandidate.candidate.department || 'N/A'}</div>
-                    <div><span className="font-semibold text-gray-500">Section:</span> {selectedCandidate.candidate.section || 'N/A'}</div>
+                <h3 className="text-base font-extrabold text-gray-900">{selectedCandidate.candidate.name}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs text-gray-700 mt-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-gray-500 w-14 shrink-0">USN:</span>
+                    <span className="font-medium text-gray-900">{selectedCandidate.candidate.usn || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-gray-500 w-14 shrink-0">Email:</span>
+                    <span className="font-medium text-gray-900 truncate" title={selectedCandidate.candidate.email}>{selectedCandidate.candidate.email || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-gray-500 w-14 shrink-0">Dept:</span>
+                    <span className="font-medium text-gray-900">{selectedCandidate.candidate.department || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-gray-500 w-14 shrink-0">Section:</span>
+                    <span className="font-medium text-gray-900">{selectedCandidate.candidate.section || 'N/A'}</span>
                   </div>
                 </div>
               </div>

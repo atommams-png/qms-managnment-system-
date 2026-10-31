@@ -1,3 +1,4 @@
+import { autoSubmitExpiredAttempts } from './attempts.js';
 // ============================================================
 // RESULT ROUTES
 // ============================================================
@@ -49,6 +50,9 @@ router.get('/attempt/:attemptId', async (req, res) => {
 router.get('/exam/:examId', async (req, res) => {
   try {
     const { examId } = req.params;
+
+    // Automatically auto-submit any expired attempts before returning results
+    await autoSubmitExpiredAttempts(examId);
 
     const [results] = await pool.execute(
       `SELECT r.*,
