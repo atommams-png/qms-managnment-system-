@@ -47,6 +47,73 @@ const TakeExam = () => {
   // Local storage backup key for crash/reload resilience
   const storageKey = candidateId && examId ? `exam_progress_${examId}_${candidateId}` : '';
 
+  const handleSubmit = useCallback(async (forcedTabSwitches?: number) => {
+    if (submitted) return;
+    setSubmitted(true);
+    const att = attemptRef.current;
+    if (!att) return;
+    const finalTabSwitches = forcedTabSwitches ?? tabSwitchesRef.current;
+
+    const currentQuestionId = questions[currentQ]?.id;
+    if (currentQuestionId) {
+      const elapsedSeconds = Math.max(0, Math.round((Date.now() - questionEnteredAtRef.current) / 1000));
+      questionTimesRef.current[currentQuestionId] = (questionTimesRef.current[currentQuestionId] || 0) + elapsedSeconds;
+      questionEnteredAtRef.current = Date.now();
+    }
+
+    try {
+      // Sanitize answers to only include safe, serializable fields
+      const answersWithTime = answers.map(a => ({
+        questionId: a.questionId,
+        selectedAnswer: a.selectedAnswer,
+        timeSpentSeconds: Math.max(0, Math.round(questionTimesRef.current[a.questionId] || 0)),
+      }));
+
+      // Quick debug: log answers shape to catch any accidental DOM / event objects
+      // (remove this log after debugging in development)
+      // eslint-disable-next-line no-console
+      console.debug('Submitting answersWithTime:', answersWithTime);
+
+      const currentDevice = deviceRef.current || (await detectDeviceAsync());
+
+      // Only pass the specific fields needed, not the entire attempt object (which has circular refs)
+      const result = await submitAttempt(att.id, answersWithTime, finalTabSwitches, {
+        deviceType: currentDevice.deviceType,
+        deviceName: currentDevice.deviceLabel,
+        deviceOs: currentDevice.os,
+        isDesktopMode: currentDevice.isDesktopMode,
+        deviceInfo: currentDevice.deviceDetails
+      });
+      if (!result) {
+        toast.error('Failed to generate result. Please try again.');
+        setSubmitted(false);
+        return;
+      }
+
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+
+      // Clean up localStorage backup after successful submission
+      if (storageKey) {
+        try {
+          localStorage.removeItem(storageKey);
+        } catch {}
+      }
+
+      // Disable back button after submission
+      window.history.pushState(null, '', window.location.href);
+      window.addEventListener('popstate', () => {
+        window.history.pushState(null, '', window.location.href);
+        toast.error('Back navigation is disabled after exam submission');
+      });
+
+      navigate(`/exam/${code}/result`, { state: { attemptId: att.id, examId: att.examId } });
+    } catch (error) {
+      console.error('Error submitting exam:', error);
+      toast.error('Error submitting exam');
+      setSubmitted(false);
+    }
+  }, [answers, submitted, navigate, code, questions, currentQ, storageKey]);
+
   // Auto-scroll the active question button into view inside the sliding navigator
   useEffect(() => {
     questionBtnRefs.current[currentQ]?.scrollIntoView({
@@ -259,73 +326,6 @@ const TakeExam = () => {
       if (alertTimeoutId) clearTimeout(alertTimeoutId);
     };
   }, [exam, submitted, alertTimeoutId]);
-
-  const handleSubmit = useCallback(async (forcedTabSwitches?: number) => {
-    if (submitted) return;
-    setSubmitted(true);
-    const att = attemptRef.current;
-    if (!att) return;
-    const finalTabSwitches = forcedTabSwitches ?? tabSwitchesRef.current;
-
-    const currentQuestionId = questions[currentQ]?.id;
-    if (currentQuestionId) {
-      const elapsedSeconds = Math.max(0, Math.round((Date.now() - questionEnteredAtRef.current) / 1000));
-      questionTimesRef.current[currentQuestionId] = (questionTimesRef.current[currentQuestionId] || 0) + elapsedSeconds;
-      questionEnteredAtRef.current = Date.now();
-    }
-
-    try {
-      // Sanitize answers to only include safe, serializable fields
-      const answersWithTime = answers.map(a => ({
-        questionId: a.questionId,
-        selectedAnswer: a.selectedAnswer,
-        timeSpentSeconds: Math.max(0, Math.round(questionTimesRef.current[a.questionId] || 0)),
-      }));
-
-      // Quick debug: log answers shape to catch any accidental DOM / event objects
-      // (remove this log after debugging in development)
-      // eslint-disable-next-line no-console
-      console.debug('Submitting answersWithTime:', answersWithTime);
-
-      const currentDevice = deviceRef.current || (await detectDeviceAsync());
-
-      // Only pass the specific fields needed, not the entire attempt object (which has circular refs)
-      const result = await submitAttempt(att.id, answersWithTime, finalTabSwitches, {
-        deviceType: currentDevice.deviceType,
-        deviceName: currentDevice.deviceLabel,
-        deviceOs: currentDevice.os,
-        isDesktopMode: currentDevice.isDesktopMode,
-        deviceInfo: currentDevice.deviceDetails
-      });
-      if (!result) {
-        toast.error('Failed to generate result. Please try again.');
-        setSubmitted(false);
-        return;
-      }
-
-      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
-
-      // Clean up localStorage backup after successful submission
-      if (storageKey) {
-        try {
-          localStorage.removeItem(storageKey);
-        } catch {}
-      }
-
-      // Disable back button after submission
-      window.history.pushState(null, '', window.location.href);
-      window.addEventListener('popstate', () => {
-        window.history.pushState(null, '', window.location.href);
-        toast.error('Back navigation is disabled after exam submission');
-      });
-
-      navigate(`/exam/${code}/result`, { state: { attemptId: att.id, examId: att.examId } });
-    } catch (error) {
-      console.error('Error submitting exam:', error);
-      toast.error('Error submitting exam');
-      setSubmitted(false);
-    }
-  }, [answers, submitted, navigate, code, questions, currentQ, storageKey]);
 
   const navigateToQuestion = (targetIndex: number) => {
     if (targetIndex < 0 || targetIndex >= questions.length || targetIndex === currentQ) return;
