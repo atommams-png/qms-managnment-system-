@@ -762,7 +762,7 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
                   </div>
 
                   {/* Status Badge */}
-                  <div className="shrink-0 flex flex-col items-end gap-1">
+                  <div className="shrink-0 flex items-center">
                     {c.isLimitExceeded ? (
                       <span className="bg-rose-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-2xs flex items-center gap-1">
                         <XCircle className="h-3 w-3" />
@@ -784,28 +784,6 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
                     ) : (
                       <span className="bg-gray-200 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
                         Not Started
-                      </span>
-                    )}
-
-                    {/* Heartbeat Indicator */}
-                    {c.isLive && (
-                      <span
-                        className={`text-[9px] font-semibold flex items-center gap-1 ${
-                          c.isHeartbeatActive ? 'text-emerald-700' : 'text-gray-500'
-                        }`}
-                        title={`Last active: ${c.lastActiveFormatted}`}
-                      >
-                        {c.isHeartbeatActive ? (
-                          <>
-                            <Wifi className="h-2.5 w-2.5 text-emerald-600 animate-pulse" />
-                            <span>Active now</span>
-                          </>
-                        ) : (
-                          <>
-                            <WifiOff className="h-2.5 w-2.5 text-gray-400" />
-                            <span>{c.lastActiveFormatted}</span>
-                          </>
-                        )}
                       </span>
                     )}
                   </div>
@@ -1093,24 +1071,15 @@ export const LiveExamMonitor: React.FC<LiveExamMonitorProps> = ({
 
             <div className="space-y-4 pt-2">
               {/* Student Identity Card */}
-              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 flex flex-col sm:flex-row justify-between gap-3">
+              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5">
                 <div>
                   <h3 className="text-base font-extrabold text-gray-900">{selectedCandidate.candidate.name}</h3>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-700 mt-1">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs text-gray-700 mt-1">
                     <div><span className="font-semibold text-gray-500">USN:</span> {selectedCandidate.candidate.usn || 'N/A'}</div>
                     <div><span className="font-semibold text-gray-500">Email:</span> {selectedCandidate.candidate.email || 'N/A'}</div>
                     <div><span className="font-semibold text-gray-500">Dept:</span> {selectedCandidate.candidate.department || 'N/A'}</div>
                     <div><span className="font-semibold text-gray-500">Section:</span> {selectedCandidate.candidate.section || 'N/A'}</div>
                   </div>
-                </div>
-                <div className="flex flex-col items-start sm:items-end justify-center shrink-0">
-                  <span className="text-[10px] text-gray-500 uppercase font-semibold">Time in Exam</span>
-                  <span className="text-base font-mono font-bold text-emerald-800">
-                    {selectedCandidate.timeElapsedFormatted}
-                  </span>
-                  <span className="text-[10px] text-gray-500 mt-0.5">
-                    Last active: {selectedCandidate.lastActiveFormatted}
-                  </span>
                 </div>
               </div>
 

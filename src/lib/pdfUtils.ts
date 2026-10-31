@@ -1754,10 +1754,10 @@ export async function exportExamDetailedPdfReport(
   // =========================================================================
   // DETAILED QUESTION-BY-QUESTION INDIVIDUAL BREAKDOWN CARDS
   // =========================================================================
-  if (currentY + 50 > pageHeight - 18) {
-    doc.addPage();
-    currentY = 20;
-  }
+  // Start Section on a fresh page so DETAILED QUESTION WISE ANALYSIS and Question #1
+  // always start together cleanly at the top, eliminating orphan headers and large blank voids.
+  doc.addPage();
+  currentY = 20;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
